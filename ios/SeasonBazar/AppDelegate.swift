@@ -29,6 +29,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       launchOptions: launchOptions
     )
 
+    // Show splash screen after starting React Native
+    RNSplashScreen.show()
+
     return true
   }
 }

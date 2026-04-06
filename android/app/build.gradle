@@ -7,6 +7,14 @@ apply plugin: "com.facebook.react"
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
 react {
+    // Use the same Node as your terminal when set (fixes Metro needing ES2023 APIs if
+    // the Gradle daemon resolves a different `node` on PATH, e.g. from Android Studio).
+    // Example: export NODE_BINARY="$HOME/.nvm/versions/node/$(nvm version default)/bin/node"
+    def nodeFromEnv = System.getenv("NODE_BINARY")
+    if (nodeFromEnv != null && !nodeFromEnv.trim().isEmpty()) {
+        nodeExecutableAndArgs = [nodeFromEnv.trim()]
+    }
+
     /* Folders */
     //   The root of your project, i.e. where "package.json" lives. Default is '../..'
     // root = file("../../")
