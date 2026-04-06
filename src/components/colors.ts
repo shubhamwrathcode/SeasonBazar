@@ -1,7 +1,7 @@
 export const Colors = {
     white: '#ffffff',
     black: '#000000',
-    primary: '#522ED1',
+    primary: '#562CDA',
     lightPurple: '#F0E9FF',
     white80: 'rgba(255, 255, 255, 0.8)',
     white40: 'rgba(255, 255, 255, 0.4)',

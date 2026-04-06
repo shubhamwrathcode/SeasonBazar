@@ -26,14 +26,15 @@ const SLIDES = [
     },
     {
         id: '2',
-        title: 'Fast, Flexible\nSecure Payments',
-        subtitle: 'Pay seamlessly with cards, wallets,\nor cash on delivery.',
+        title: 'Free\nHome Delivery',
+        subtitle: 'Enjoy Free Delivery on All Orders\nAbove ₹499, Shop Now.',
         image: ImageAssets.OnBoarding2,
     },
     {
         id: '3',
-        title: 'Free\nHome Delivery',
-        subtitle: 'Enjoy Free Delivery on All Orders\nAbove ₹499, Shop Now.',
+
+        title: 'Fast, Flexible\nSecure Payments',
+        subtitle: 'Pay seamlessly with cards, wallets,\nor cash on delivery.',
         image: ImageAssets.OnBoarding3,
     },
 ];

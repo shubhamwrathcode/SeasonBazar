@@ -16,13 +16,74 @@ import AppButton from '../../../components/AppButton';
 import AppInput from '../../../components/AppInput';
 import AuthHeader from '../../../components/AuthHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator } from 'react-native';
+import { customerService } from '../../../services/customerService';
+import { useAuthStore } from '../../../store/useAuthStore';
+import Toast from 'react-native-simple-toast';
 
 const { width, height } = Dimensions.get('window');
 
-const SignUp = ({ navigation }: any) => {
+const SignUp = ({ navigation, route }: any) => {
   const insets = useSafeAreaInsets();
+  const setAuth = useAuthStore((state) => state.setAuth);
   const [step, setStep] = useState(1);
   const [role, setRole] = useState<'customer' | 'vendor'>('customer');
+  const [loading, setLoading] = useState(false);
+
+  // Form State
+  const [formData, setFormData] = useState({
+    email: '',
+    firstName: '',
+    lastName: '',
+    phone: '',
+    shopName: '',
+    shopUrl: '',
+  });
+
+  const handleInputChange = (key: string, value: string) => {
+    setFormData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleRegister = async () => {
+    if (!formData.email || !formData.firstName || !formData.lastName || !formData.phone) {
+      Toast.show('Please fill all required fields', Toast.SHORT);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const customerData = {
+        email: formData.email,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        username: formData.email.split('@')[0] + Math.floor(Math.random() * 1000), // WooCommerce requires unique username
+        billing: {
+          phone: formData.phone,
+        },
+        role: role === 'vendor' ? 'seller' : 'customer', // Adjust role based on selection
+      };
+
+      console.log('--- Registering User ---');
+      console.log('Endpoint: POST /customers');
+      console.log('Payload:', JSON.stringify(customerData, null, 2));
+
+      const res = await customerService.createCustomer(customerData);
+
+      console.log('--- Registration Success ---');
+      console.log('User ID from WP:', res.id);
+      console.log('Full Response Data:', JSON.stringify(res, null, 2));
+
+      Toast.show('Account created! Please check your email to create a password, then login.', Toast.LONG);
+      navigation.navigate('Login');
+    } catch (error: any) {
+      console.log('--- Registration Error ---');
+      console.log('Error Message:', error.message);
+      console.log('Error Data:', JSON.stringify(error, null, 2));
+      Toast.show(error.message || 'Something went wrong', Toast.SHORT);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const renderRoleSelection = () => (
     <View style={styles.roleContainer}>
@@ -36,13 +97,11 @@ const SignUp = ({ navigation }: any) => {
           onPress={() => setRole('customer')}
           activeOpacity={0.8}
         >
-          {/* <View style={styles.roleImageContainer}> */}
           <Image
             source={ImageAssets.customer}
             style={styles.roleImage}
             resizeMode="contain"
           />
-          {/* </View> */}
           <AppText
             font={AppFonts.Regular}
             size={18}
@@ -58,13 +117,11 @@ const SignUp = ({ navigation }: any) => {
           onPress={() => setRole('vendor')}
           activeOpacity={0.8}
         >
-          {/* <View style={styles.roleImageContainer}> */}
           <Image
-            source={ImageAssets.vendor} // Placeholder for Vendor vector
+            source={ImageAssets.vendor}
             style={styles.roleImage}
             resizeMode="contain"
           />
-          {/* </View> */}
           <AppText
             font={AppFonts.Regular}
             size={18}
@@ -85,6 +142,7 @@ const SignUp = ({ navigation }: any) => {
     </View>
   );
 
+
   const renderRegistrationForm = () => (
     <View style={styles.formContainer}>
       <AppInput
@@ -92,6 +150,8 @@ const SignUp = ({ navigation }: any) => {
         placeholder="example@gmail.com"
         leftIcon={ImageAssets.email}
         containerStyle={styles.inputGap}
+        value={formData.email}
+        onChangeText={(txt: string) => handleInputChange('email', txt)}
       />
       <AppText size={12} color={Colors.black} style={styles.hintText}>
         A link to set a new password will be sent to your email address.
@@ -102,6 +162,8 @@ const SignUp = ({ navigation }: any) => {
         placeholder="Enter name"
         leftIcon={ImageAssets.userImg}
         containerStyle={styles.inputGap}
+        value={formData.firstName}
+        onChangeText={(txt: string) => handleInputChange('firstName', txt)}
       />
 
       <AppInput
@@ -109,6 +171,8 @@ const SignUp = ({ navigation }: any) => {
         placeholder="Enter name"
         containerStyle={styles.inputGap}
         leftIcon={ImageAssets.userImg}
+        value={formData.lastName}
+        onChangeText={(txt: string) => handleInputChange('lastName', txt)}
       />
 
       {role === 'vendor' && (
@@ -118,12 +182,16 @@ const SignUp = ({ navigation }: any) => {
             placeholder="Enter name"
             containerStyle={styles.inputGap}
             leftIcon={ImageAssets.shop}
+            value={formData.shopName}
+            onChangeText={(txt: string) => handleInputChange('shopName', txt)}
           />
           <AppInput
             label="Shop URL*"
             placeholder="Enter name"
             containerStyle={styles.inputGap}
             leftIcon={ImageAssets.shop}
+            value={formData.shopUrl}
+            onChangeText={(txt: string) => handleInputChange('shopUrl', txt)}
           />
           <AppText size={12} color={Colors.black30} style={styles.urlHint}>
             https://www.seasonbazaar.com/store/
@@ -137,18 +205,16 @@ const SignUp = ({ navigation }: any) => {
         keyboardType="phone-pad"
         containerStyle={styles.inputGap}
         leftIcon={ImageAssets.mobile}
+        value={formData.phone}
+        onChangeText={(txt: string) => handleInputChange('phone', txt)}
       />
 
       <AppButton
         title="Register"
         variant="primary"
-        onPress={() => { 
-          if (role === 'vendor') {
-            navigation.navigate('SubscribePlan');
-          } else {
-            navigation.navigate('Main');
-          }
-        }}
+        onPress={handleRegister}
+        disabled={loading}
+        loading={loading}
         style={styles.registerButton}
       />
 
@@ -171,7 +237,7 @@ const SignUp = ({ navigation }: any) => {
 
       <AuthHeader
         title="Sign Up"
-        subtitle="Secure create account for a personalized experience."
+        subtitle={step === 1 ? "Choose your role to get started." : `Create your ${role} account.`}
         onBackPress={() => step === 1 ? navigation.goBack() : setStep(1)}
       />
 
@@ -227,26 +293,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 15,
-    // Shadow for unselected
-    // shadowColor: '#000',
-    // shadowOffset: { width: 0, height: 2 },
-    // shadowOpacity: 0.05,
-    // shadowRadius: 10,
-    // elevation: 2,
   },
   roleCardActive: {
     borderColor: Colors.primary,
     backgroundColor: '#F8F6FF',
     borderWidth: 1
-  },
-  roleImageContainer: {
-    width: width * 0.28,
-    height: width * 0.28,
-    borderRadius: width * 0.14,
-    backgroundColor: '#EAE5FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
   },
   roleImage: {
     width: '85%',

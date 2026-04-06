@@ -15,21 +15,41 @@ import AppButton from '../../../components/AppButton';
 import AppInput from '../../../components/AppInput';
 import AuthHeader from '../../../components/AuthHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import Toast from 'react-native-simple-toast';
+import { authService } from '../../../services/authService';
 
 const { width, height } = Dimensions.get('window');
 
 const ForgotPassword = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleReset = async () => {
+    if (!email) {
+      Toast.show('Please enter your email address', Toast.SHORT);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Calling our API service
+      await authService.forgotPassword(email);
+      Toast.show('Reset link sent to your email!', Toast.LONG);
+      navigation.navigate('Login');
+    } catch (error: any) {
+      // Even if it fails (like generic WP error), we show message
+      Toast.show(error.message || 'If this email exists, a link has been sent.', Toast.LONG);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* <AuthHeader
-        title="Forgot Password"
-        subtitle={`Please enter your email address to\nreceive a password reset link.`}
-        onBackPress={() => navigation.goBack()}
-      /> */}
       <AuthHeader
         title="Oops! Forgot?"
         subtitle={`It happens! Enter your email\nto reset your password.`}
@@ -48,12 +68,15 @@ const ForgotPassword = ({ navigation }: any) => {
             autoCapitalize="none"
             keyboardType="email-address"
             containerStyle={styles.inputGap}
+            value={email}
+            onChangeText={setEmail}
           />
 
           <AppButton
             title="Reset Password"
             variant="primary"
-            onPress={() => { }}
+            onPress={handleReset}
+            loading={loading}
             style={styles.resetButton}
           />
 

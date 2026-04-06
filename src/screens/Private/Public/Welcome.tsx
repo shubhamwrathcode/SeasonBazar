@@ -130,7 +130,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingTop: 10,
-
   },
   characterImage: {
     width: width * 0.95,
@@ -147,7 +146,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 0,
+    marginTop: 10,
     marginBottom: 15,
   },
   line: {
