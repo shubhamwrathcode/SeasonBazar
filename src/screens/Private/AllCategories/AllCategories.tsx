@@ -14,76 +14,77 @@ import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
 import LinearGradient from 'react-native-linear-gradient';
 
+import { productService } from '../../../services/productService';
+
 const { width, height } = Dimensions.get('window');
 
-const SIDEBAR_ITEMS = [
-  { id: '1', name: 'Dolls', icon: ImageAssets.doll },
-  { id: '2', name: 'Pooja Product', icon: ImageAssets.tradition },
-  { id: '3', name: 'Smart Gadget', icon: ImageAssets.electric },
-  { id: '4', name: 'Mother & Kids', icon: ImageAssets.motherkids },
-  { id: '5', name: 'Home & Garden', icon: ImageAssets.homeGarden },
-  { id: '6', name: 'Bag Bazaar', icon: ImageAssets.motherkids },
-  { id: '7', name: 'Appliances', icon: ImageAssets.appliances },
-  { id: '8', name: 'Sports', icon: ImageAssets.sports },
-  { id: '9', name: 'Beauty', icon: ImageAssets.beauty },
-];
-
-const GADGETS = [
-  { id: '1', name: 'Mobile', image: ImageAssets.electric },
-  { id: '2', name: 'Smart Watch', image: ImageAssets.watch },
-  { id: '3', name: 'Head Phone', image: ImageAssets.headphone },
-  { id: '4', name: 'Neckbands', image: ImageAssets.headphone },
-  { id: '5', name: 'Party Speakers', image: ImageAssets.headphone },
-  { id: '6', name: 'Soundbar', image: ImageAssets.electric },
-  { id: '7', name: 'Smart Band', image: ImageAssets.electric },
-  { id: '8', name: 'Smart Tags', image: ImageAssets.watch },
-  { id: '9', name: 'Smart Ring', image: ImageAssets.watch },
-];
-
-const ACCESSORIES = [
-  { id: '1', name: 'Mobile Chargers', image: ImageAssets.electric },
-  { id: '2', name: 'Mobile Cables', image: ImageAssets.headphone },
-  { id: '3', name: 'Powerbank', image: ImageAssets.watch },
-  { id: '4', name: 'Mobile Chargers', image: ImageAssets.electric },
-  { id: '5', name: 'Mobile Cables', image: ImageAssets.headphone },
-  { id: '6', name: 'Powerbank', image: ImageAssets.watch },
-  { id: '7', name: 'Mobile Chargers', image: ImageAssets.electric },
-  { id: '8', name: 'Mobile Cables', image: ImageAssets.headphone },
-  { id: '9', name: 'Powerbank', image: ImageAssets.watch },
-];
-
 const AllCategories = ({ navigation }: any) => {
-  const [selectedCategory, setSelectedCategory] = useState('3');
+  const [categories, setCategories] = useState<any[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loadingCats, setLoadingCats] = useState(true);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  React.useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  React.useEffect(() => {
+    if (selectedCategoryId) {
+      fetchProductsByCategory(selectedCategoryId);
+    }
+  }, [selectedCategoryId]);
+
+  const fetchCategories = async () => {
+    try {
+      setLoadingCats(true);
+      const res = await productService.getCategories({ per_page: 50 });
+      const mainCats = res.filter((c: any) => c.parent === 0 && c.name !== 'Uncategorized');
+      setCategories(mainCats);
+      if (mainCats.length > 0) {
+        setSelectedCategoryId(mainCats[0].id);
+      }
+    } catch (error) {
+      console.log('Fetch Cats Error:', error);
+    } finally {
+      setLoadingCats(false);
+    }
+  };
+
+  const fetchProductsByCategory = async (id: number) => {
+    try {
+      setLoadingProducts(true);
+      const res = await productService.getProducts({ category: id, per_page: 20 });
+      setProducts(res);
+    } catch (error) {
+      console.log('Fetch Products Error:', error);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
 
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {SIDEBAR_ITEMS.map((item) => {
-          const isSelected = selectedCategory === item.id;
+        {categories.map((item) => {
+          const isSelected = selectedCategoryId === item.id;
           return (
             <TouchableOpacity
               activeOpacity={0.9}
               key={item.id}
-              onPress={() => setSelectedCategory(item.id)}
-              style={[styles.sidebarItem,]}
+              onPress={() => setSelectedCategoryId(item.id)}
+              style={[styles.sidebarItem]}
             >
-              {isSelected ? (
-                <LinearGradient
-                  colors={['#ffe59eff', '#562CDA']}
-                  style={styles.sidebarIconBg}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Image source={item.icon} style={styles.sidebarIcon} resizeMode="contain" />
-                </LinearGradient>
-              ) : (
-                <View style={styles.sidebarIconBg}>
-                  <Image source={item.icon} style={styles.sidebarIcon} resizeMode="contain" />
-                </View>
-              )}
+              <View style={[styles.sidebarIconBg, isSelected && { backgroundColor: Colors.primary }]}>
+                {item.image?.src ? (
+                  <Image source={{ uri: item.image.src }} style={styles.sidebarIcon} resizeMode="contain" />
+                ) : (
+                  <Image source={ImageAssets.doll} style={[styles.sidebarIcon, isSelected && { tintColor: Colors.white }]} resizeMode="contain" />
+                )}
+              </View>
               <AppText
-                font={AppFonts.Regular}
-                size={14}
+                font={isSelected ? AppFonts.SemiBold : AppFonts.Regular}
+                size={12}
                 color={isSelected ? Colors.primary : Colors.black}
                 textAlign="center"
               >
@@ -97,40 +98,62 @@ const AllCategories = ({ navigation }: any) => {
     </View>
   );
 
-  const renderGridSection = (title: string, data: any[]) => (
-    <View style={styles.gridSection}>
-      <View style={styles.gridHeader}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Image source={ImageAssets.star} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
-          <AppText font={AppFonts.SemiBold} size={15} color={Colors.black}>
-            {title}
-          </AppText>
+  const renderMainContent = () => {
+    const selectedCatName = categories.find(c => c.id === selectedCategoryId)?.name || 'Products';
+
+    if (loadingProducts) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <AppText font={AppFonts.Medium} color={Colors.textGrey}>Loading products...</AppText>
         </View>
-      </View>
-      <View style={styles.grid}>
-        {data.map((item) => (
-          <TouchableOpacity 
-            activeOpacity={0.9} 
-            key={item.id} 
-            style={styles.gridItem}
-            onPress={() => (navigation as any).navigate('ProductDetail', { product: item })}
-          >
-            <LinearGradient
-              colors={['#F3EEFF', '#BFAEFF']}
-              style={styles.gridItemImgBg}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Image source={item.image} style={styles.gridItemImg} resizeMode="contain" />
-            </LinearGradient>
-            <AppText font={AppFonts.Regular} size={13} color={Colors.black} textAlign="center" numberOfLines={2}>
-              {item.name}
-            </AppText>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
+      );
+    }
+
+    return (
+      <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.gridSection}>
+          <View style={styles.gridHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Image source={ImageAssets.star1} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
+              <AppText font={AppFonts.SemiBold} size={15} color={Colors.black}>
+                {selectedCatName}
+              </AppText>
+            </View>
+          </View>
+          <View style={styles.grid}>
+            {products.length > 0 ? products.map((item) => (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                key={item.id}
+                style={styles.gridItem}
+                onPress={() => (navigation as any).navigate('ProductDetail', { product: item })}
+              >
+                <LinearGradient
+                  colors={['#F3EEFF', '#BFAEFF']}
+                  style={styles.gridItemImgBg}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Image source={{ uri: item.images?.[0]?.src }} style={styles.gridItemImg} resizeMode="contain" />
+                </LinearGradient>
+                <AppText font={AppFonts.Regular} size={13} color={Colors.black} textAlign="center" numberOfLines={2}>
+                  {item.name}
+                </AppText>
+                <AppText font={AppFonts.SemiBold} size={13} color={Colors.primary} textAlign="center">
+                  ₹{item.price}
+                </AppText>
+              </TouchableOpacity>
+            )) : (
+              <View style={{ marginTop: 50, alignItems: 'center', width: '100%' }}>
+                <AppText font={AppFonts.Medium} color={Colors.textGrey}>No products in this category</AppText>
+              </View>
+            )}
+          </View>
+        </View>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -140,13 +163,13 @@ const AllCategories = ({ navigation }: any) => {
         onSearch={() => navigation.navigate('SearchResults')}
       />
       <View style={styles.content}>
-        {renderSidebar()}
+        {loadingCats ? (
+          <View style={{ width: 90, backgroundColor: '#F1F4FF', justifyContent: 'center' }}>
+            <AppText textAlign='center' size={10}>Loading...</AppText>
+          </View>
+        ) : renderSidebar()}
         <View style={styles.mainContentWrapper}>
-          <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
-            {renderGridSection('All Smart Gadgets', GADGETS)}
-            {renderGridSection('Accessories', ACCESSORIES)}
-            <View style={{ height: 40 }} />
-          </ScrollView>
+          {renderMainContent()}
         </View>
       </View>
     </View>

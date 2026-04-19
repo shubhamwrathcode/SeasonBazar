@@ -16,6 +16,10 @@ import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
 
 import LinearGradient from 'react-native-linear-gradient';
+import { useCartStore } from '../../../store/useCartStore';
+import { useWishlistStore } from '../../../store/useWishlistStore';
+import { productService } from '../../../services/productService';
+import SimpleToast from 'react-native-simple-toast';
 
 const { width } = Dimensions.get('window');
 
@@ -33,68 +37,145 @@ const SIMILAR_PRODUCTS = [
 ];
 
 const ProductDetail = ({ navigation, route }: any) => {
+  const { product } = route.params || {};
   const insets = useSafeAreaInsets();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const mainListRef = React.useRef<FlatList>(null);
 
-  const productImages = [ImageAssets.watch, ImageAssets.watch, ImageAssets.watch, ImageAssets.watch, ImageAssets.watch, ImageAssets.watch];
+  const { addItem } = useCartStore();
+  const { toggleWishlist, isInWishlist } = useWishlistStore();
+  const isFav = isInWishlist(product?.id);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [similarProducts, setSimilarProducts] = useState<any[]>([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
+
+  React.useEffect(() => {
+    if (product?.id) {
+      fetchReviews();
+      fetchSimilarProducts();
+    }
+  }, [product?.id]);
+
+  const fetchReviews = async () => {
+    try {
+      setLoadingReviews(true);
+      const res = await productService.getProductReviews(product.id);
+      console.log('--- PRODUCT REVIEWS API RESPONSE ---', res);
+      setReviews(res);
+    } catch (error) {
+      console.log('Reviews Error:', error);
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
+  const fetchSimilarProducts = async () => {
+    try {
+      setLoadingSimilar(true);
+      if (product?.related_ids && product.related_ids.length > 0) {
+        const res = await productService.getProducts({ include: product.related_ids.slice(0, 10).join(',') });
+        console.log('--- SIMILAR PRODUCTS API RESPONSE ---', res);
+        setSimilarProducts(res);
+      }
+    } catch (error) {
+      console.log('Similar Products Error:', error);
+    } finally {
+      setLoadingSimilar(false);
+    }
+  };
+
+  const productImages = product?.images || [];
+
+  // Helper to remove HTML tags cleanly
+  const stripHtml = (html: string) => {
+    if (!html) return '';
+    return html
+      .replace(/<li>/g, '\n• ') // Replace list items with bullets
+      .replace(/<\/?[^>]+(>|$)/g, '') // Remove all other tags
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\n\s*\n/g, '\n') // Remove extra empty lines
+      .trim();
+  };
 
   const onThumbnailPress = (index: number) => {
     setActiveImageIndex(index);
     mainListRef.current?.scrollToIndex({ index, animated: true });
   };
 
-  const renderThumbnail = ({ item, index }: { item: any, index: number }) => (
+  // Helper to get vendor's processing time or calculate fallback
+  const getDeliveryInfo = () => {
+    // Check if Dokan processing time exists in meta_data
+    const processingTime = product?.meta_data?.find((m: any) => m.key === '_dps_processing_time')?.value;
+    
+    if (processingTime && processingTime !== '') {
+      return `Processing: ${processingTime} | Delivery Soon`;
+    }
+
+    const date = new Date();
+    date.setDate(date.getDate() + 5); 
+    const formattedDate = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return `Delivery by ${formattedDate} | 5-7 Working Days`;
+  };
+
+  const renderThumbnail = ({ item, index }: { item: any; index: number }) => (
     <TouchableOpacity
       onPress={() => onThumbnailPress(index)}
       style={[styles.thumbnailWrap, activeImageIndex === index && styles.thumbnailActive]}
     >
-      <Image source={item} style={styles.thumbnailImg} resizeMode="contain" />
+      <Image source={{ uri: item.src }} style={styles.thumbnailImg} resizeMode="contain" />
     </TouchableOpacity>
   );
 
   const renderMainImage = ({ item }: { item: any }) => (
     <View style={styles.mainImgContainer}>
-      <Image source={item} style={styles.mainImg} resizeMode="contain" />
+      <Image source={{ uri: item.src }} style={styles.mainImg} resizeMode="contain" />
     </View>
   );
 
   const renderSimilarProduct = ({ item }: { item: any }) => (
-    <View style={styles.similarCard}>
+    <TouchableOpacity
+      style={styles.similarCard}
+      onPress={() => (navigation as any).push('ProductDetail', { product: item })}
+    >
       <View style={styles.similarImgContainer}>
-        <Image source={item.image} style={styles.similarImg} resizeMode="contain" />
-        <TouchableOpacity style={styles.heartBtnSmall}>
-          <Image source={ImageAssets.heart} style={styles.heartIconSmall} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.addBtnSmall}>
-          <Image source={ImageAssets.cart} style={styles.addIconSmall} />
-          <AppText font={AppFonts.Medium} size={10} color={Colors.black}>Add</AppText>
+        <Image
+          source={{ uri: item.images?.[0]?.src || 'https://via.placeholder.com/150' }}
+          style={styles.similarImg}
+          resizeMode="contain"
+        />
+        <TouchableOpacity
+          style={styles.heartBtnSmall}
+          onPress={() => toggleWishlist(item)}
+        >
+          <Image
+            source={ImageAssets.wishlist}
+            style={[styles.heartIconSmall, { tintColor: isInWishlist(item.id) ? Colors.primary : Colors.black30 }]}
+          />
         </TouchableOpacity>
       </View>
       <View style={styles.similarInfo}>
         <View style={styles.ratingRowSmall}>
           <Image source={ImageAssets.star1} style={styles.starIconTiny} />
-          <AppText font={AppFonts.SemiBold} size={10} color={Colors.black}>{item.rating}</AppText>
+          <AppText font={AppFonts.SemiBold} size={10} color={Colors.black}>
+            {item.average_rating || '4.0'}
+          </AppText>
         </View>
         <AppText font={AppFonts.Regular} size={13} color={Colors.black} numberOfLines={1}>
           {item.name}
         </AppText>
         <View style={styles.priceRowSmall}>
-          <AppText font={AppFonts.Regular} size={10} color={Colors.black30} style={styles.oldPriceSmall}>
-            {item.originalPrice}
-          </AppText>
+          {item.regular_price && item.regular_price !== item.price && (
+            <AppText font={AppFonts.Regular} size={10} color={Colors.black30} style={styles.oldPriceSmall}>
+              ₹{item.regular_price}
+            </AppText>
+          )}
           <AppText font={AppFonts.SemiBold} size={13} color={Colors.black}>
-            {item.price}
+            ₹{item.price}
           </AppText>
-        </View>
-        <View style={styles.sellerRowSmall}>
-          <View style={styles.sellerAvatarSmall}>
-            <Image source={ImageAssets.profileBottom} style={styles.sellerIconSmall} />
-          </View>
-          <AppText font={AppFonts.Regular} size={11} color={Colors.black}>Srikant</AppText>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -108,9 +189,19 @@ const ProductDetail = ({ navigation, route }: any) => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Image source={ImageAssets.backIcon} style={styles.backIcon} />
           </TouchableOpacity>
+
+          {/* Wishlist Button aligned with Back Button */}
+          <TouchableOpacity
+            onPress={() => toggleWishlist(product)}
+            style={styles.headerWishlistBtn}
+          >
+            <Image
+              source={ImageAssets.wishlist}
+              style={[styles.headerWishlistIcon, { tintColor: isFav ? Colors.primary : Colors.black30 }]}
+            />
+          </TouchableOpacity>
         </View>
 
-        {/* Product Carousel */}
         <LinearGradient
           colors={['#ECEAFF', Colors.white]}
           style={styles.heroSection}
@@ -128,11 +219,14 @@ const ProductDetail = ({ navigation, route }: any) => {
             }}
             keyExtractor={(_, i) => i.toString()}
           />
-          <View style={styles.pagination}>
-            {productImages.map((_, i) => (
-              <View key={i} style={[styles.dot, i === activeImageIndex && styles.activeDot]} />
-            ))}
-          </View>
+          {productImages.length > 1 && (
+            <View style={styles.pagination}>
+              {productImages.map((_, i) => (
+                <View key={i} style={[styles.dot, i === activeImageIndex && styles.activeDot]} />
+              ))}
+            </View>
+          )}
+
         </LinearGradient>
 
         {/* Thumbnails */}
@@ -149,29 +243,61 @@ const ProductDetail = ({ navigation, route }: any) => {
         {/* Info */}
         <View style={styles.contentPadding}>
           <AppText font={AppFonts.Medium} size={18} color={Colors.black}>
-            Noise ColorFit Pro 6 Smartwatch
+            {product?.name || 'Product Detail'}
           </AppText>
           <View style={styles.priceRow}>
-            <AppText font={AppFonts.Regular} size={14} color={Colors.black30} style={styles.oldPrice}>3,000</AppText>
-            <AppText font={AppFonts.SemiBold} size={22} color={Colors.black}>₹1,000</AppText>
+            {product?.regular_price !== product?.price && (
+              <AppText font={AppFonts.Regular} size={14} color={Colors.black30} style={styles.oldPrice}>₹{product?.regular_price}</AppText>
+            )}
+            <AppText font={AppFonts.SemiBold} size={22} color={Colors.black}>₹{product?.price || '0'}</AppText>
           </View>
-          <AppText font={AppFonts.Regular} size={13} color={Colors.textGrey} style={styles.selectedColor}>
-            Selected Strap Color: <AppText font={AppFonts.Medium} color={Colors.textGrey}>Green Titanium</AppText>
-          </AppText>
+          <View style={styles.sellerRowSmall}>
+            <View style={styles.sellerAvatarSmall}>
+              {product?.store?.vendor_avatar && (
+                <Image source={{ uri: product.store.vendor_avatar }} style={{ width: 18, height: 18, borderRadius: 9 }} />
+              )}
+            </View>
+            <AppText font={AppFonts.Regular} size={13} color={Colors.textGrey}>
+              Sold by: <AppText font={AppFonts.Medium} color={Colors.black}>{product?.store?.shop_name || 'Season Bazar'}</AppText>
+            </AppText>
+          </View>
 
-          {/* Highlights */}
+          {/* Dynamic Highlights / Categories */}
           <AppText font={AppFonts.Medium} size={18} color={Colors.black} style={styles.sectionTitle}>
-            Product highlights
+            Key Information
           </AppText>
           <View style={styles.highlightsCard}>
-            {HIGHLIGHTS.map((item) => (
-              <View key={item.id} style={styles.highlightRow}>
-                <View style={styles.highlightIconBg}>
-                  <Image source={item.icon} style={styles.highlightIcon} resizeMode="contain" />
+            {product?.attributes && product.attributes.length > 0 ? (
+              product.attributes.map((attr: any, index: number) => (
+                <View key={index} style={styles.highlightRow}>
+                  <View style={styles.highlightIconBg}>
+                    <Image source={ImageAssets.star1} style={styles.highlightIcon} />
+                  </View>
+                  <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
+                    <AppText font={AppFonts.Medium}>{attr.name}: </AppText>
+                    {attr.options.join(', ')}
+                  </AppText>
                 </View>
-                <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>{item.title}</AppText>
+              ))
+            ) : product?.categories ? (
+              product.categories.slice(0, 3).map((cat: any, index: number) => (
+                <View key={index} style={styles.highlightRow}>
+                  <View style={styles.highlightIconBg}>
+                    <Image source={ImageAssets.star1} style={styles.highlightIcon} />
+                  </View>
+                  <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
+                    Part of <AppText font={AppFonts.Medium}>{cat.name}</AppText> Collection
+                  </AppText>
+                </View>
+              ))
+            ) : (
+              <View style={styles.highlightRow}>
+                <View style={styles.highlightIconBg}>
+                  <Image source={ImageAssets.delivery} style={styles.highlightIcon} />
+                </View>
+                <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>Premium Quality Guaranteed</AppText>
               </View>
-            ))}
+            )}
           </View>
 
           {/* Description */}
@@ -180,47 +306,90 @@ const ProductDetail = ({ navigation, route }: any) => {
           </AppText>
           <View style={styles.descriptionCard}>
             <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey} style={styles.descText}>
-              Strap colour : brown | strap material : leather{"\n"}
-              Dial colour : black | for : men, boys{"\n"}
-              Display type : analogue | case shape : round{"\n"}
-              Product color may be slightly vary due to modelling effects
+              {stripHtml(product?.description || product?.short_description || 'No description available for this product.')}
             </AppText>
           </View>
 
-          {/* Delivery */}
+          {/* Delivery Details */}
           <AppText font={AppFonts.Medium} size={18} color={Colors.black} style={styles.sectionTitle}>
-            Delivery details
+            Delivery Details
           </AppText>
           <View style={styles.deliveryRow}>
             <Image source={ImageAssets.vehicle} style={styles.deliveryIcon} />
-            <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>Delivery within 3-5 working days</AppText>
+            <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
+              {product?.shipping_required ? 'Delivery within 3-7 working days' : 'Instant Digital Delivery'}
+            </AppText>
           </View>
           <View style={styles.deliveryRow}>
             <Image source={ImageAssets.shipping} style={styles.deliveryIcon} />
-            <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>Free Shipping & Returns on this item</AppText>
+            <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
+              {product?.shipping_required 
+                ? getDeliveryInfo()
+                : 'Instant Digital Delivery via Email'}
+            </AppText>
           </View>
 
           {/* Similar Products */}
           <AppText font={AppFonts.Medium} size={18} color={Colors.black} style={[styles.sectionTitle, { marginBottom: 15 }]}>
             Similar Products
           </AppText>
-          <FlatList
-            data={SIMILAR_PRODUCTS}
-            renderItem={renderSimilarProduct}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.similarList}
-          />
+          {loadingSimilar ? (
+            <AppText size={14} color={Colors.textGrey}>Loading similar items...</AppText>
+          ) : similarProducts.length > 0 ? (
+            <FlatList
+              data={similarProducts}
+              renderItem={renderSimilarProduct}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.similarList}
+            />
+          ) : (
+            <AppText size={14} color={Colors.textGrey}>No similar products found.</AppText>
+          )}
+
+          {/* Reviews Section */}
+          <AppText font={AppFonts.Medium} size={18} color={Colors.black} style={styles.sectionTitle}>
+            User Reviews ({reviews.length})
+          </AppText>
+          {loadingReviews ? (
+            <AppText size={14} color={Colors.textGrey}>Loading reviews...</AppText>
+          ) : reviews.length > 0 ? (
+            reviews.map((rev) => (
+              <View key={rev.id} style={styles.reviewCard}>
+                <View style={styles.reviewHeader}>
+                  <AppText font={AppFonts.SemiBold} size={14} color={Colors.black}>{rev.reviewer}</AppText>
+                  <AppText font={AppFonts.Regular} size={12} color={Colors.textGrey}>⭐ {rev.rating}</AppText>
+                </View>
+                <AppText font={AppFonts.Regular} size={13} color={Colors.textGrey}>
+                  {stripHtml(rev.review)}
+                </AppText>
+              </View>
+            ))
+          ) : (
+            <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>No reviews for this product yet.</AppText>
+          )}
         </View>
       </ScrollView>
 
       {/* Footer Buttons */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 10 }]}>
-        <TouchableOpacity style={styles.cartBtn}>
+        <TouchableOpacity
+          style={styles.cartBtn}
+          onPress={() => {
+            addItem(product);
+            SimpleToast.show('Added to Cart');
+          }}
+        >
           <AppText font={AppFonts.Medium} size={18} color={Colors.primary}>Add to Cart</AppText>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.buyBtn}>
-          <AppText font={AppFonts.Medium} size={18} color={Colors.white}>Buy</AppText>
+        <TouchableOpacity
+          style={styles.buyBtn}
+          onPress={() => {
+            addItem(product);
+            (navigation as any).navigate('MyCart');
+          }}
+        >
+          <AppText font={AppFonts.Medium} size={18} color={Colors.white}>Buy Now</AppText>
         </TouchableOpacity>
       </View>
     </View>
@@ -237,8 +406,25 @@ const styles = StyleSheet.create({
   header: {
     position: 'absolute',
     top: 0,
-    left: 20,
-    zIndex: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    zIndex: 20,
+  },
+  headerWishlistBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerWishlistIcon: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
   },
   backBtn: {
     width: 40,
@@ -250,26 +436,27 @@ const styles = StyleSheet.create({
   backIcon: {
     width: 35,
     height: 35,
-    tintColor: Colors.primary,
+    tintColor: Colors.primary, resizeMode: "contain"
   },
   scrollContent: {
     paddingBottom: 100,
   },
   heroSection: {
     width: width,
-    height: 380,
+    height: 340, // Reduced from 380
     backgroundColor: '#F9FAFF',
-    paddingTop: 60,
+    paddingTop: 80, // More space for header
   },
   mainImgContainer: {
     width: width,
-    height: 300,
+    height: 240, // Balanced height like Flipkart
     justifyContent: 'center',
     alignItems: 'center',
   },
   mainImg: {
-    width: '85%',
-    height: '85%',
+    width: '90%',
+    height: '100%',
+    resizeMode: 'contain',
   },
   pagination: {
     flexDirection: 'row',
@@ -502,5 +689,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  reviewCard: {
+    padding: 15,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    marginTop: 10,
+    borderWidth: 0.5,
+    borderColor: '#EEE',
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 5,
   },
 });

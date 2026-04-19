@@ -1,5 +1,10 @@
 import React from 'react';
+import { View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useAuthStore } from '../store/useAuthStore';
+import AppText from '../components/AppText';
+import { AppFonts } from '../components/Appfonts';
+import { Colors } from '../components/colors';
 import OnBoarding from '../screens/Private/Public/OnBoarding';
 import Login from '../screens/Private/Public/Login';
 import SignUp from '../screens/Private/Public/SignUp';
@@ -10,14 +15,17 @@ import AllCategories from '../screens/Private/AllCategories/AllCategories';
 import SearchResults from '../screens/Private/Search/SearchResults';
 import FilterScreen from '../screens/Private/Search/FilterScreen';
 import ProductDetail from '../screens/Private/Product/ProductDetail';
+import MyProfile from '../screens/Private/Profile/MyProfile';
 import ProfileSettings from '../screens/Private/Profile/ProfileSettings';
 import Wishlist from '../screens/Private/Profile/Wishlist';
+import MyOrders from '../screens/Private/Profile/MyOrders';
 import HelpSupport from '../screens/Private/Support/HelpSupport';
 import Compare from '../screens/Private/Product/Compare';
 import MyCart from '../screens/Private/Cart/MyCart';
 import SubscribePlan from '../screens/Private/Vendor/SubscribePlan';
 import PlanDetail from '../screens/Private/Vendor/PlanDetail';
-import Checkout from '../screens/Private/Vendor/Checkout';
+import CustomerCheckout from '../screens/Private/Cart/Checkout';
+import VendorCheckout from '../screens/Private/Vendor/Checkout';
 import PaymentMethod from '../screens/Private/Vendor/PaymentMethod';
 import VendorHome from '../screens/Private/Vendor/VendorHome';
 import VendorTabNavigator from './VendorTabNavigator';
@@ -58,9 +66,11 @@ export type RootStackParamList = {
   HelpSupport: undefined;
   Compare: undefined;
   MyCart: undefined;
+  MyOrders: undefined;
   SubscribePlan: undefined;
   PlanDetail: undefined;
   Checkout: undefined;
+  VendorCheckout: undefined;
   PaymentMethod: undefined;
   VendorMain: undefined;
   VendorHome: undefined;
@@ -89,54 +99,96 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppStack = () => {
+  const { isAuthenticated, user } = useAuthStore();
+  const [isHydrated, setIsHydrated] = React.useState(false);
+
+  // Wait for store to hydrate from AsyncStorage
+  React.useEffect(() => {
+    const checkHydration = async () => {
+      // @ts-ignore - reaching into internal persist state
+      const hydrated = useAuthStore.persist?.hasHydrated();
+      if (hydrated) {
+        setIsHydrated(true);
+      } else {
+        // Wait a bit or use listener if needed
+        setTimeout(() => setIsHydrated(true), 500);
+      }
+    };
+    checkHydration();
+  }, []);
+
+  if (!isHydrated) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' }}>
+        {/* You can replace this with a real Splash Screen later */}
+        <AppText font={AppFonts.Medium} size={18} color={Colors.primary}>Loading...</AppText>
+      </View>
+    );
+  }
+
   return (
     <Stack.Navigator
-      initialRouteName="OnBoarding"
       screenOptions={{
         headerShown: false,
       }}
     >
-      <Stack.Screen name="OnBoarding" component={OnBoarding} />
-      <Stack.Screen name="Welcome" component={Welcome} />
-      <Stack.Screen name="Login" component={Login} />
-      <Stack.Screen name="SignUp" component={SignUp} />
-      <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
-      <Stack.Screen name="Main" component={TabNavigator} />
-      <Stack.Screen name="AllCategories" component={AllCategories} />
-      <Stack.Screen name="SearchResults" component={SearchResults} />
-      <Stack.Screen name="FilterScreen" component={FilterScreen} />
-      <Stack.Screen name="ProductDetail" component={ProductDetail} />
-      <Stack.Screen name="ProfileSettings" component={ProfileSettings} />
-      <Stack.Screen name="Wishlist" component={Wishlist} />
-      <Stack.Screen name="HelpSupport" component={HelpSupport} />
-      <Stack.Screen name="Compare" component={Compare} />
-      <Stack.Screen name="MyCart" component={MyCart} />
-      <Stack.Screen name="SubscribePlan" component={SubscribePlan} />
-      <Stack.Screen name="PlanDetail" component={PlanDetail} />
-      <Stack.Screen name="Checkout" component={Checkout} />
-      <Stack.Screen name="PaymentMethod" component={PaymentMethod} />
-      <Stack.Screen name="VendorMain" component={VendorTabNavigator} />
-      <Stack.Screen name="VendorHome" component={VendorHome} />
-      <Stack.Screen name="VendorDashboard" component={VendorDashboard} />
-      <Stack.Screen name="Announcements" component={Announcements} />
-      <Stack.Screen name="Products" component={Products} />
-      <Stack.Screen name="Orders" component={Orders} />
-      <Stack.Screen name="Coupons" component={Coupons} />
-      <Stack.Screen name="Reports" component={Reports} />
-      <Stack.Screen name="Support" component={Support} />
-      <Stack.Screen name="AddProduct" component={AddProduct} />
-      <Stack.Screen name="AddCoupon" component={AddCoupon} />
-      <Stack.Screen name="ProductReport" component={ProductReport} />
-      <Stack.Screen name="DeliveryTime" component={DeliveryTime} />
-      <Stack.Screen name="Withdraw" component={Withdraw} />
-      <Stack.Screen name="WithdrawHistory" component={WithdrawHistory} />
-      <Stack.Screen name="Followers" component={Followers} />
-      <Stack.Screen name="Settings" component={Settings} />
-      <Stack.Screen name="VisitStore" component={VisitStore} />
-      <Stack.Screen name="VendorPaymentMethod" component={VendorPaymentMethod} />
-      <Stack.Screen name="VendorVerification" component={VendorVerification} />
-      <Stack.Screen name="VendorSocialProfiles" component={VendorSocialProfiles} />
-      <Stack.Screen name="VendorRAW" component={VendorRAW} />
+      {!isAuthenticated ? (
+        // Auth Stack
+        <>
+          <Stack.Screen name="OnBoarding" component={OnBoarding} />
+          <Stack.Screen name="Welcome" component={Welcome} />
+          <Stack.Screen name="Login" component={Login} />
+          <Stack.Screen name="SignUp" component={SignUp} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
+        </>
+      ) : (
+        // Authenticated Stack
+        <>
+          {user?.role === 'vendor' ? (
+            <Stack.Screen name="VendorMain" component={VendorTabNavigator} />
+          ) : (
+            <Stack.Screen name="Main" component={TabNavigator} />
+          )}
+
+          {/* Common Private Screens */}
+          <Stack.Screen name="AllCategories" component={AllCategories} />
+          <Stack.Screen name="SearchResults" component={SearchResults} />
+          <Stack.Screen name="Checkout" component={CustomerCheckout} />
+          <Stack.Screen name="FilterScreen" component={FilterScreen} />
+          <Stack.Screen name="ProductDetail" component={ProductDetail} />
+          <Stack.Screen name="ProfileSettings" component={ProfileSettings} />
+          <Stack.Screen name="Wishlist" component={Wishlist} />
+          <Stack.Screen name="MyOrders" component={MyOrders} />
+          <Stack.Screen name="HelpSupport" component={HelpSupport} />
+          <Stack.Screen name="Compare" component={Compare} />
+          <Stack.Screen name="MyCart" component={MyCart} />
+          <Stack.Screen name="SubscribePlan" component={SubscribePlan} />
+          <Stack.Screen name="PlanDetail" component={PlanDetail} />
+          <Stack.Screen name="VendorCheckout" component={VendorCheckout} />
+          <Stack.Screen name="PaymentMethod" component={PaymentMethod} />
+          <Stack.Screen name="VendorHome" component={VendorHome} />
+          <Stack.Screen name="VendorDashboard" component={VendorDashboard} />
+          <Stack.Screen name="Announcements" component={Announcements} />
+          <Stack.Screen name="Products" component={Products} />
+          <Stack.Screen name="Orders" component={Orders} />
+          <Stack.Screen name="Coupons" component={Coupons} />
+          <Stack.Screen name="Reports" component={Reports} />
+          <Stack.Screen name="Support" component={Support} />
+          <Stack.Screen name="AddProduct" component={AddProduct} />
+          <Stack.Screen name="AddCoupon" component={AddCoupon} />
+          <Stack.Screen name="ProductReport" component={ProductReport} />
+          <Stack.Screen name="DeliveryTime" component={DeliveryTime} />
+          <Stack.Screen name="Withdraw" component={Withdraw} />
+          <Stack.Screen name="WithdrawHistory" component={WithdrawHistory} />
+          <Stack.Screen name="Followers" component={Followers} />
+          <Stack.Screen name="Settings" component={Settings} />
+          <Stack.Screen name="VisitStore" component={VisitStore} />
+          <Stack.Screen name="VendorPaymentMethod" component={VendorPaymentMethod} />
+          <Stack.Screen name="VendorVerification" component={VendorVerification} />
+          <Stack.Screen name="VendorSocialProfiles" component={VendorSocialProfiles} />
+          <Stack.Screen name="VendorRAW" component={VendorRAW} />
+        </>
+      )}
     </Stack.Navigator>
   );
 };

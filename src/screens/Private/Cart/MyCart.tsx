@@ -16,54 +16,58 @@ import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
 import AppHeader from '../../../components/AppHeader';
 import LinearGradient from 'react-native-linear-gradient';
+import { useCartStore } from '../../../store/useCartStore';
 
 const { width } = Dimensions.get('window');
 
-const CART_ITEMS = [
-  { id: '1', name: 'Noise ColorFit Pro 6 ...', price: '₹1,000', originalPrice: '3,000', strap: 'Green Titanium', image: ImageAssets.watch },
-  { id: '2', name: 'Noise ColorFit Pro 6 ...', price: '₹1,000', originalPrice: '3,000', strap: 'Green Titanium', image: ImageAssets.watch },
-  { id: '3', name: 'Noise ColorFit Pro 6 ...', price: '₹1,000', originalPrice: '3,000', strap: 'Green Titanium', image: ImageAssets.watch },
-];
-
 const MyCart = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
+  const { items, removeItem, updateQuantity, totalAmount, clearCart } = useCartStore();
 
   const renderCartItem = ({ item }: { item: any }) => (
     <View style={styles.cartCard}>
       <View style={styles.cardTop}>
         <LinearGradient colors={['#FFFFFF', '#AF8ACA33']} style={styles.imgBg}>
-          <Image source={item.image} style={styles.productImg} resizeMode="contain" />
+          <Image source={item.image ? { uri: item.image } : ImageAssets.watch} style={styles.productImg} resizeMode="contain" />
         </LinearGradient>
 
         <View style={styles.infoArea}>
           <View style={styles.titleRow}>
-            <AppText font={AppFonts.Medium} size={15} color="#535353CC" style={styles.titleText}>{item.name}</AppText>
-            <Image source={ImageAssets.heartfill} style={styles.heartIcon} />
+            <AppText font={AppFonts.Medium} size={15} color="#535353CC" style={styles.titleText} numberOfLines={2}>
+              {item.name}
+            </AppText>
+            <TouchableOpacity onPress={() => removeItem(item.id)}>
+              <Image source={ImageAssets.close} style={[styles.heartIcon, { tintColor: 'red' }]} />
+            </TouchableOpacity>
           </View>
           <AppText font={AppFonts.Regular} size={12} color={Colors.textGrey}>
-            Selected Strap Color: <AppText size={12} font={AppFonts.Regular} color={Colors.textGrey}>{item.strap}</AppText>
+            Sold by: <AppText size={12} font={AppFonts.Medium} color={Colors.black}>{item.store?.shop_name || 'Season Bazar'}</AppText>
           </AppText>
-          <View style={styles.ratingRow}>
-            {[1, 2, 3, 4].map(i => (
-              <Image key={i} source={ImageAssets.star1} style={styles.starIcon} />
-            ))}
-          </View>
           <View style={styles.priceRow}>
-            <AppText font={AppFonts.Regular} size={13} color={Colors.black30} style={styles.oldPrice}>{item.originalPrice}</AppText>
-            <AppText font={AppFonts.SemiBold} size={20} color={Colors.black}>{item.price}</AppText>
+            {item.regular_price && item.regular_price !== item.price && (
+              <AppText font={AppFonts.Regular} size={13} color={Colors.black30} style={styles.oldPrice}>₹{item.regular_price}</AppText>
+            )}
+            <AppText font={AppFonts.SemiBold} size={20} color={Colors.black}>₹{item.price}</AppText>
           </View>
         </View>
       </View>
 
       <View style={styles.controlsRow}>
-        <TouchableOpacity style={styles.qtyBtn}>
-          <AppText font={AppFonts.Regular} size={14} color={Colors.black}>Qty: 1</AppText>
-          <Image source={ImageAssets.arrowright} style={styles.dropdownIcon} />
-        </TouchableOpacity>
+        <View style={styles.quantityControl}>
+          <TouchableOpacity onPress={() => updateQuantity(item.id, item.quantity - 1)} style={styles.qtyActionBtn}>
+            <AppText font={AppFonts.Medium} size={20} color={Colors.black}>-</AppText>
+          </TouchableOpacity>
+          <AppText font={AppFonts.SemiBold} size={16} color={Colors.black} style={styles.qtyValue}>
+            {item.quantity}
+          </AppText>
+          <TouchableOpacity onPress={() => updateQuantity(item.id, item.quantity + 1)} style={styles.qtyActionBtn}>
+            <AppText font={AppFonts.Medium} size={20} color={Colors.black}>+</AppText>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.couponContainer}>
           <TextInput
-            placeholder="Coupon Code"
+            placeholder="Coupon"
             placeholderTextColor={Colors.black30}
             style={styles.couponInput}
           />
@@ -73,21 +77,31 @@ const MyCart = ({ navigation }: any) => {
         </View>
       </View>
 
-      <View style={styles.hintRow}>
-        <Image source={ImageAssets.vehicle} style={styles.hintIcon} />
-        <AppText font={AppFonts.Regular} size={12} color="#535353CC">
-          Shipping options will be updated during checkout.
-        </AppText>
-      </View>
-
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.removeBtn}>
-          <AppText font={AppFonts.Medium} size={16} color={Colors.black}>Remove</AppText>
+        <TouchableOpacity
+          style={styles.removeBtn}
+          onPress={() => removeItem(item.id)}
+        >
+          <AppText font={AppFonts.Medium} size={16} color={Colors.black}>Delete</AppText>
         </TouchableOpacity>
         <TouchableOpacity style={styles.buyBtn}>
-          <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Buy Now</AppText>
+          <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Proceed</AppText>
         </TouchableOpacity>
       </View>
+    </View>
+  );
+
+  const renderEmptyCart = () => (
+    <View style={styles.emptyContainer}>
+      <Image source={ImageAssets.cart} style={styles.emptyImg} />
+      <AppText font={AppFonts.SemiBold} size={20} color={Colors.black}>Your Cart is Empty</AppText>
+      <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey} style={{ marginTop: 10 }}>Add some products to your bazaar!</AppText>
+      <TouchableOpacity
+        style={styles.shopNowBtn}
+        onPress={() => navigation.navigate('Main')}
+      >
+        <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Shop Now</AppText>
+      </TouchableOpacity>
     </View>
   );
 
@@ -97,10 +111,34 @@ const MyCart = ({ navigation }: any) => {
       <AppHeader title="My Cart" onBack={() => navigation.goBack()} />
 
       <FlatList
-        data={CART_ITEMS}
+        data={items}
         renderItem={renderCartItem}
+        ListEmptyComponent={renderEmptyCart}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListFooterComponent={items.length > 0 ? (
+          <View style={styles.summaryContainer}>
+            <View style={styles.summaryRow}>
+              <AppText font={AppFonts.Regular} size={16} color={Colors.textGrey}>Subtotal</AppText>
+              <AppText font={AppFonts.SemiBold} size={18} color={Colors.black}>₹{totalAmount().toFixed(2)}</AppText>
+            </View>
+            <View style={[styles.summaryRow, { marginTop: 10 }]}>
+              <AppText font={AppFonts.Regular} size={16} color={Colors.textGrey}>Shipping</AppText>
+              <AppText font={AppFonts.Medium} size={16} color={Colors.primary}>Calculated at checkout</AppText>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.summaryRow}>
+              <AppText font={AppFonts.SemiBold} size={18} color={Colors.black}>Total</AppText>
+              <AppText font={AppFonts.SemiBold} size={22} color={Colors.primary}>₹{totalAmount().toFixed(2)}</AppText>
+            </View>
+            <TouchableOpacity
+              style={styles.checkoutBtn}
+              onPress={() => navigation.navigate('Checkout')}
+            >
+              <AppText font={AppFonts.SemiBold} size={18} color={Colors.white}>Check Out</AppText>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       />
     </View>
   );
@@ -262,6 +300,68 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 12,
     backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityControl: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F0F0',
+    borderRadius: 10,
+    height: 48,
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+  },
+  qtyActionBtn: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyValue: {
+    paddingHorizontal: 10,
+  },
+  emptyContainer: {
+    marginTop: 100,
+    alignItems: 'center',
+  },
+  emptyImg: {
+    width: 120,
+    height: 120,
+    tintColor: '#DDD',
+    marginBottom: 20,
+  },
+  shopNowBtn: {
+    marginTop: 30,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 40,
+    paddingVertical: 12,
+    borderRadius: 30,
+  },
+  summaryContainer: {
+    marginTop: 20,
+    padding: 20,
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    borderWidth: 0.5,
+    borderColor: '#DDD',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#EEE',
+    marginVertical: 15,
+  },
+  checkoutBtn: {
+    marginTop: 25,
+    backgroundColor: Colors.primary,
+    height: 55,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
   },

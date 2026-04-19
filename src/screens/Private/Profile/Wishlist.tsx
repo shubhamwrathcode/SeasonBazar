@@ -17,17 +17,16 @@ import AppHeader from '../../../components/AppHeader';
 
 import LinearGradient from 'react-native-linear-gradient';
 
-const { width } = Dimensions.get('window');
+import { useWishlistStore } from '../../../store/useWishlistStore';
+import { useCartStore } from '../../../store/useCartStore';
+import SimpleToast from 'react-native-simple-toast';
 
-const FAVORITES = [
-  { id: '1', name: 'Noise ColorFit Pro 6 ...', price: '₹1,000', originalPrice: '3,000', strap: 'Green Titanium', image: ImageAssets.watch },
-  { id: '2', name: 'Noise ColorFit Pro 6 ...', price: '₹1,000', originalPrice: '3,000', strap: 'Green Titanium', image: ImageAssets.watch },
-  { id: '3', name: 'Noise ColorFit Pro 6 ...', price: '₹1,000', originalPrice: '3,000', strap: 'Green Titanium', image: ImageAssets.watch },
-  { id: '4', name: 'Noise ColorFit Pro 6 ...', price: '₹1,000', originalPrice: '3,000', strap: 'Green Titanium', image: ImageAssets.watch },
-];
+const { width } = Dimensions.get('window');
 
 const Wishlist = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
+  const { favorites, toggleWishlist } = useWishlistStore();
+  const { addItem } = useCartStore();
 
   const renderFavoriteItem = ({ item }: { item: any }) => (
     <View style={styles.favoriteCard}>
@@ -36,38 +35,55 @@ const Wishlist = ({ navigation }: any) => {
           colors={['#FFFFFF', '#AF8ACA33']} 
           style={styles.imgBg}
         >
-          <Image source={item.image} style={styles.productImg} resizeMode="contain" />
+          <Image source={{ uri: item.image }} style={styles.productImg} resizeMode="contain" />
         </LinearGradient>
         <View style={styles.infoArea}>
           <View style={styles.titleRow}>
             <AppText font={AppFonts.Medium} size={15} color="#535353CC" style={styles.titleText}>
               {item.name}
             </AppText>
-            <Image source={ImageAssets.heartfill} style={styles.heartIcon} />
+            <TouchableOpacity onPress={() => toggleWishlist(item)}>
+               <Image source={ImageAssets.heartfill} style={styles.heartIcon} />
+            </TouchableOpacity>
           </View>
           <View style={styles.priceRow}>
-            <AppText font={AppFonts.Regular} size={13} color={Colors.black30} style={styles.oldPrice}>
-              {item.originalPrice}
-            </AppText>
+            {item.regular_price && (
+               <AppText font={AppFonts.Regular} size={13} color={Colors.black30} style={styles.oldPrice}>
+                  ₹{item.regular_price}
+               </AppText>
+            )}
             <AppText font={AppFonts.SemiBold} size={20} color={Colors.black}>
-              {item.price}
+              ₹{item.price}
             </AppText>
           </View>
-          <AppText font={AppFonts.Regular} size={12} color="#535353CC">
-            Selected Strap Color: <AppText font={AppFonts.Medium} color="#535353CC">{item.strap}</AppText>
-          </AppText>
         </View>
       </View>
 
       <View style={styles.cardFooter}>
-        <TouchableOpacity style={styles.removeBtn}>
+        <TouchableOpacity style={styles.removeBtn} onPress={() => toggleWishlist(item)}>
           <AppText font={AppFonts.Medium} size={16} color={Colors.black}>Remove</AppText>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.addBtn}>
-          <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Add Card</AppText>
+        <TouchableOpacity 
+          style={styles.addBtn}
+          onPress={() => {
+             addItem(item);
+             SimpleToast.show('Added to Cart');
+          }}
+        >
+          <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Add to Cart</AppText>
         </TouchableOpacity>
       </View>
     </View>
+  );
+
+  const renderEmpty = () => (
+     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100 }}>
+        <Image source={ImageAssets.wishlist} style={{ width: 100, height: 100, tintColor: '#DDD' }} />
+        <AppText font={AppFonts.SemiBold} size={20} color={Colors.black} style={{ marginTop: 20 }}>No Favorites Yet</AppText>
+        <TouchableOpacity style={styles.shopNowBtn} onPress={() => navigation.navigate('Home')}>
+           <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Explore Products</AppText>
+        </TouchableOpacity>
+     </View>
   );
 
   return (
@@ -76,8 +92,9 @@ const Wishlist = ({ navigation }: any) => {
       <AppHeader title="Favorites" onBack={() => navigation.goBack()} />
 
       <FlatList
-        data={FAVORITES}
+        data={favorites}
         renderItem={renderFavoriteItem}
+        ListEmptyComponent={renderEmpty}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
@@ -171,5 +188,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  shopNowBtn: {
+    marginTop: 20,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 25,
   },
 });

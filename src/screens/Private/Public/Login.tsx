@@ -26,7 +26,7 @@ const { width, height } = Dimensions.get('window');
 const Login = ({ navigation, route }: any) => {
   const insets = useSafeAreaInsets();
   const setAuth = useAuthStore((state: any) => state.setAuth);
-  
+
   const [step, setStep] = useState(1);
   const [role, setRole] = useState<'customer' | 'vendor'>('customer');
   const [username, setUsername] = useState('');
@@ -44,21 +44,22 @@ const Login = ({ navigation, route }: any) => {
     setLoading(true);
     try {
       const res = await authService.login({ username, password });
-      
-      console.log('--- Login API Success ---');
+
+      console.log('--- Login API Success ---', res);
       console.log('JWT Data:', JSON.stringify(res, null, 2));
 
-      // After JWT login, we might need to fetch full user info to get the role correctly
+      // Mapping API response to Auth Store structure
       setAuth({
-        id: res.user_id || res.id,
-        email: res.user_email || res.email,
+        id: res.user_id || res.id || 0,
+        email: res.user_email || res.email || '',
+        first_name: res.user_display_name || res.user_nicename || '',
+        last_name: '',
+        role: role, // 'customer' or 'vendor'
         token: res.token,
-        display_name: res.user_display_name,
-        role: role, // Use the role selected on Welcome screen
       });
 
       Toast.show('Welcome back!', Toast.SHORT);
-      
+
       // Navigate based on role
       if (role === 'vendor') {
         navigation.navigate('Main'); // Or Vendor Dashboard if separate
@@ -174,19 +175,6 @@ const Login = ({ navigation, route }: any) => {
 
               {/* Remember Me and Forgot Password */}
               <View style={styles.row}>
-                <TouchableOpacity
-                  style={styles.rememberMeContainer}
-                  onPress={() => setRememberMe(!rememberMe)}
-                  activeOpacity={0.7}
-                >
-                  <Image
-                    source={rememberMe ? ImageAssets.check : ImageAssets.uncheck}
-                    style={styles.checkboxIcon}
-                  />
-                  <AppText font={AppFonts.Regular} size={15} color={Colors.black}>
-                    Remember me
-                  </AppText>
-                </TouchableOpacity>
 
                 <TouchableOpacity onPress={() => { navigation.navigate('ForgotPassword') }}>
                   <AppText style={{ textDecorationLine: "underline" }} font={AppFonts.Regular} size={14} color={Colors.primary}>
@@ -246,9 +234,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     marginBottom: 30,
   },
   rememberMeContainer: {

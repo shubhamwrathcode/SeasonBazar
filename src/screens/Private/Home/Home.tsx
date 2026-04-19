@@ -17,42 +17,80 @@ import AppText from '../../../components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { productService } from '../../../services/productService';
+import { useAuthStore } from '../../../store/useAuthStore';
 
 const { width } = Dimensions.get('window');
 
-const categories = [
-  { id: '1', name: 'Deals', image: ImageAssets.deals || ImageAssets.uncheck },
-  { id: '2', name: 'Dolls', image: ImageAssets.doll || ImageAssets.uncheck },
-  { id: '3', name: 'Pooja Product', image: ImageAssets.tradition || ImageAssets.uncheck },
-  { id: '4', name: 'Electronic', image: ImageAssets.electric || ImageAssets.uncheck },
-  { id: '5', name: 'Mother & Kids', image: ImageAssets.motherkids || ImageAssets.uncheck },
-  { id: '6', name: 'Home & Garden', image: ImageAssets.homeGarden || ImageAssets.uncheck },
-];
-
-const promoCategories = [
-  { id: '1', name: 'Watches', image: ImageAssets.watch },
-  { id: '2', name: 'Toys & Games', image: ImageAssets.remote },
-  { id: '3', name: 'Beauty & Health', image: ImageAssets.beauty },
-  { id: '4', name: 'Jewelry', image: ImageAssets.jewel },
-  { id: '5', name: 'Appliances', image: ImageAssets.appliances },
-  { id: '6', name: 'Sports', image: ImageAssets.sports },
-];
-
-const homeTabs = ['All', 'Top 100 Offers', 'New Arrivals', 'Accessories', 'Latest'];
 
 const Home = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { user }: any = useAuthStore();
   const [activeTab, setActiveTab] = React.useState('All');
   const [activeBannerIndex, setActiveBannerIndex] = React.useState(0);
-  const bannerData = [1, 2, 3, 4, 5];
+  const [products, setProducts] = React.useState<any[]>([]);
+  const [featuredProducts, setFeaturedProducts] = React.useState<any[]>([]);
+  const [wooCategories, setWooCategories] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  // const bannerData = [1, 2, 3, 4, 5];
+
+  React.useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  const fetchProducts = async (catId?: string | number, search?: string) => {
+    try {
+      setLoading(true);
+      const res = await productService.getProducts({ 
+        category: catId !== 'All' ? catId : undefined,
+        search: search || undefined,
+        per_page: 20 
+      });
+      console.log('--- HOME PRODUCTS API RESPONSE ---', res);
+      setProducts(res);
+    } catch (error) {
+      console.log('Error fetching products:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await productService.getCategories({ per_page: 50 });
+      console.log('--- CATEGORIES API RESPONSE ---', res);
+      setWooCategories(res.filter((c: any) => c.name !== 'Uncategorized'));
+    } catch (error) {
+      console.log('Error fetching categories:', error);
+    }
+  };
+
+  const fetchInitialData = async () => {
+    try {
+      setLoading(true);
+      const [productsRes, categoriesRes, featuredRes] = await Promise.all([
+        productService.getProducts({ per_page: 10 }),
+        productService.getCategories({ per_page: 10 }),
+        productService.getProducts({ featured: true, per_page: 5 }),
+      ]);
+      setProducts(productsRes);
+      setFeaturedProducts(featuredRes);
+      setWooCategories(categoriesRes.filter((cat: any) => cat.name !== 'Uncategorized'));
+    } catch (error) {
+      console.log('Home Fetch Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const renderHeader = () => (
     <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
       <View style={styles.locationRow}>
         <Image source={ImageAssets.location} style={styles.headerIcon} />
         <AppText font={AppFonts.Regular} size={14} color={Colors.white} style={styles.locationText} numberOfLines={1}>
-          Deliver to 63FP+34R, Pune, Chalakwadi...
+          {user ? `Deliver to ${user.user_display_name || user.user_email}` : 'Login to see your address'}
         </AppText>
       </View>
 
@@ -74,67 +112,93 @@ const Home = () => {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsContainer}>
-        {homeTabs.map((tab) => (
+        <TouchableOpacity
+          onPress={() => setActiveTab('All')}
+          style={styles.tabItem}
+        >
+          <AppText
+            font={activeTab === 'All' ? AppFonts.SemiBold : AppFonts.Regular}
+            size={14}
+            color={Colors.white}
+          >
+            All
+          </AppText>
+          {activeTab === 'All' && <View style={styles.activeBar} />}
+        </TouchableOpacity>
+
+        {wooCategories.slice(0, 5).map((tab) => (
           <TouchableOpacity
-            key={tab}
-            onPress={() => setActiveTab(tab)}
+            key={tab.id}
+            onPress={() => setActiveTab(tab.name)}
             style={styles.tabItem}
           >
             <AppText
-              font={activeTab === tab ? AppFonts.SemiBold : AppFonts.Regular}
+              font={activeTab === tab.name ? AppFonts.SemiBold : AppFonts.Regular}
               size={14}
               color={Colors.white}
             >
-              {tab}
+              {tab.name}
             </AppText>
-            {activeTab === tab && <View style={styles.activeBar} />}
+            {activeTab === tab.name && <View style={styles.activeBar} />}
           </TouchableOpacity>
         ))}
       </ScrollView>
     </View>
   );
 
-  const renderBannerItem = () => (
-    <View style={styles.bannerSlide}>
-      <Image source={ImageAssets.banner1} style={styles.bannerImage} resizeMode="cover" />
+  const renderBannerItem = ({ item }: { item: any }) => (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => (navigation as any).navigate('ProductDetail', { product: item })}
+      style={styles.bannerSlide}
+    >
+      <Image
+        source={item.images?.[0]?.src ? { uri: item.images[0].src } : ImageAssets.banner1}
+        style={styles.bannerImage}
+        resizeMode="cover"
+      />
       <View style={styles.bannerOverlay}>
-        <AppText font={AppFonts.SemiBold} size={20} color={Colors.white} style={styles.bannerTitle}>
-          Get your Iphone{"\n"}17 Right Now
+        <AppText font={AppFonts.SemiBold} size={20} color={Colors.white} style={styles.bannerTitle} numberOfLines={2}>
+          {item.name || 'Exciting Offer!'}
         </AppText>
-        <AppText font={AppFonts.Regular} size={12} color={Colors.white} style={styles.bannerSubtitle}>
-          Grab the new Iphone 17 now with exclusive deals, limited stock!
+        <AppText font={AppFonts.Regular} size={12} color={Colors.white} style={styles.bannerSubtitle} numberOfLines={2}>
+          {item.short_description?.replace(/<[^>]*>?/gm, '') || 'Limited time offer on this featured product. Grab it now!'}
         </AppText>
-        <TouchableOpacity style={styles.bannerBtn}>
-          <AppText font={AppFonts.Regular} size={13} color={Colors.black}>Get It Now  →</AppText>
-        </TouchableOpacity>
+        <View style={styles.bannerBtn}>
+          <AppText font={AppFonts.Regular} size={13} color={Colors.black}>₹{item.price} - Get It Now  →</AppText>
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
-  const renderBanner = () => (
-    <View style={styles.bannerContainer}>
-      <FlatList
-        data={bannerData}
-        renderItem={renderBannerItem}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
-          const index = Math.round(e.nativeEvent.contentOffset.x / (width - 30));
-          setActiveBannerIndex(index);
-        }}
-        keyExtractor={(_, i) => i.toString()}
-      />
-      <View style={styles.pagination}>
-        {bannerData.map((_, i) => (
-          <View
-            key={i}
-            style={[styles.dot, i === activeBannerIndex && styles.activeDotBanner]}
-          />
-        ))}
+  const renderBanner = () => {
+    const displayBanners = featuredProducts.length > 0 ? featuredProducts : [1]; // fallback
+
+    return (
+      <View style={styles.bannerContainer}>
+        <FlatList
+          data={displayBanners}
+          renderItem={renderBannerItem}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const index = Math.round(e.nativeEvent.contentOffset.x / (width - 30));
+            setActiveBannerIndex(index);
+          }}
+          keyExtractor={(item, i) => item.id?.toString() || i.toString()}
+        />
+        <View style={styles.pagination}>
+          {displayBanners.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.dot, i === activeBannerIndex && styles.activeDotBanner]}
+            />
+          ))}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderCategories = () => (
     <View style={styles.sectionContainer}>
@@ -148,16 +212,30 @@ const Home = () => {
         </TouchableOpacity>
       </View>
       <View style={styles.categoryGrid}>
-        {categories.map((item) => (
-          <View key={item.id} style={styles.categoryItem}>
-            <View style={styles.categoryImgBg}>
-              <Image source={item.image} style={styles.categoryImg} resizeMode="contain" />
+        {loading ? (
+          // Placeholder for Categories
+          [1, 2, 3, 4, 5, 6].map((i) => (
+            <View key={i} style={styles.categoryItem}>
+              <View style={[styles.categoryImgBg, { backgroundColor: '#F0F0F0' }]} />
+              <View style={[styles.categoryName, { height: 10, width: '60%', backgroundColor: '#EEE', marginTop: 10, alignSelf: 'center' }]} />
             </View>
-            <AppText font={AppFonts.Regular} size={12} color={Colors.black} textAlign="center" style={styles.categoryName}>
-              {item.name}
-            </AppText>
-          </View>
-        ))}
+          ))
+        ) : (
+          wooCategories.slice(0, 6).map((item) => (
+            <View key={item.id} style={styles.categoryItem}>
+              <View style={styles.categoryImgBg}>
+                <Image
+                  source={item.image?.src ? { uri: item.image.src } : ImageAssets.uncheck}
+                  style={styles.categoryImg}
+                  resizeMode="contain"
+                />
+              </View>
+              <AppText font={AppFonts.Regular} size={12} color={Colors.black} textAlign="center" style={styles.categoryName}>
+                {item.name}
+              </AppText>
+            </View>
+          ))
+        )}
       </View>
     </View>
   );
@@ -169,12 +247,16 @@ const Home = () => {
       style={isGrid ? styles.productCardGrid : styles.productCard}
     >
       <View style={styles.productImageContainer}>
-        <Image source={ImageAssets.dollitem} style={styles.productImage} resizeMode="cover" />
+        <Image
+          source={item.images?.[0]?.src ? { uri: item.images[0].src } : ImageAssets.dollitem}
+          style={styles.productImage}
+          resizeMode="cover"
+        />
         <TouchableOpacity style={styles.wishlistBtn}>
           <Image source={ImageAssets.wishlist} style={styles.heartIcon} />
         </TouchableOpacity>
         <View style={styles.ratingBadge}>
-          <AppText font={AppFonts.SemiBold} size={13} color={Colors.black}>⭐ 4.5</AppText>
+          <AppText font={AppFonts.SemiBold} size={13} color={Colors.black}>⭐ {item.average_rating || '4.5'}</AppText>
         </View>
         <TouchableOpacity activeOpacity={0.9} style={styles.floatingAddBtn}>
           <Image source={ImageAssets.cart} style={styles.bagIcon} />
@@ -183,48 +265,64 @@ const Home = () => {
       </View>
       <View style={styles.productInfo}>
         <AppText font={AppFonts.Regular} size={16} color={Colors.textGrey} numberOfLines={1}>
-          Varalakshmi Doll 2025...
+          {item.name || 'Product Name'}
         </AppText>
         <View style={styles.priceRow}>
-          <AppText font={AppFonts.Regular} size={14} color={Colors.black30} style={styles.oldPrice}>₹3,000</AppText>
-          <AppText font={AppFonts.Medium} size={18} color={Colors.black}>₹1,000</AppText>
+          {item.regular_price !== item.price && (
+            <AppText font={AppFonts.Regular} size={14} color={Colors.black30} style={styles.oldPrice}>₹{item.regular_price}</AppText>
+          )}
+          <AppText font={AppFonts.Medium} size={18} color={Colors.black}>₹{item.price || '0'}</AppText>
         </View>
         <View style={styles.sellerRow}>
-          <View style={styles.sellerAvatar} />
-          <AppText font={AppFonts.Regular} size={14} color={Colors.black}>Srikant</AppText>
+          <View style={styles.sellerAvatar}>
+            {item.store?.vendor_id && (
+              <Image source={{ uri: item.store?.vendor_avatar }} style={{ width: 20, height: 20, borderRadius: 10 }} />
+            )}
+          </View>
+          <AppText font={AppFonts.Regular} size={14} color={Colors.black}>
+            {item.store?.shop_name || item.store?.name || 'Season Bazar'}
+          </AppText>
         </View>
       </View>
     </TouchableOpacity>
   );
 
-  const renderPromoGrid = () => (
-    <LinearGradient
-      colors={['#2FD06A', '#CAFFDD']}
-      style={styles.promoContainer}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      <View style={styles.promoGrid}>
-        {promoCategories.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.promoItem}
-            activeOpacity={0.9}
-            onPress={() => (navigation as any).navigate('ProductDetail', { product: item })}
-          >
-            <View style={styles.promoImgBg}>
-              <Image source={item.image} style={styles.promoImg} resizeMode="contain" />
-            </View>
-            <View style={styles.promoLabelBg}>
-              <AppText font={AppFonts.Medium} size={14} color={Colors.black} textAlign="center">
-                {item.name}
-              </AppText>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </LinearGradient>
-  );
+  const renderPromoGrid = () => {
+    if (loading || wooCategories.length < 4) return null; // Hide if loading or not enough data
+
+    return (
+      <LinearGradient
+        colors={['#2FD06A', '#CAFFDD']}
+        style={styles.promoContainer}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={styles.promoGrid}>
+          {wooCategories.slice(6, 12).map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.promoItem}
+              activeOpacity={0.9}
+              onPress={() => (navigation as any).navigate('AllCategories', { categoryId: item.id })}
+            >
+              <View style={styles.promoImgBg}>
+                <Image
+                  source={item.image?.src ? { uri: item.image.src } : ImageAssets.uncheck}
+                  style={styles.promoImg}
+                  resizeMode="contain"
+                />
+              </View>
+              <View style={styles.promoLabelBg}>
+                <AppText font={AppFonts.Medium} size={14} color={Colors.black} textAlign="center">
+                  {item.name}
+                </AppText>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </LinearGradient>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -245,14 +343,30 @@ const Home = () => {
             </View>
             <TouchableOpacity><AppText font={AppFonts.Regular} size={16} color={Colors.primary}>See All</AppText></TouchableOpacity>
           </View>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={[1, 2, 3]}
-            renderItem={({ item }) => renderProduct({ item, isGrid: false })}
-            keyExtractor={(_, i) => i.toString()}
-            contentContainerStyle={styles.productList}
-          />
+          {loading ? (
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={[1, 2, 3]}
+              renderItem={() => (
+                <View style={styles.productCard}>
+                  <View style={[styles.productImageContainer, { backgroundColor: '#F0F0F0' }]} />
+                  <View style={{ height: 15, width: '80%', backgroundColor: '#EEE', marginTop: 20 }} />
+                  <View style={{ height: 15, width: '50%', backgroundColor: '#EEE', marginTop: 10 }} />
+                </View>
+              )}
+              contentContainerStyle={styles.productList}
+            />
+          ) : (
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={products.slice(0, 5)}
+              renderItem={({ item }) => renderProduct({ item, isGrid: false })}
+              keyExtractor={(item) => item.id?.toString()}
+              contentContainerStyle={styles.productList}
+            />
+          )}
         </View>
 
         {renderBanner()}
@@ -264,9 +378,9 @@ const Home = () => {
           </View>
           <FlatList
             numColumns={2}
-            data={[1, 2, 3, 4]}
+            data={products.slice(5, 10)}
             renderItem={({ item }) => renderProduct({ item, isGrid: true })}
-            keyExtractor={(_, i) => i.toString()}
+            keyExtractor={(item) => item.id?.toString()}
             scrollEnabled={false}
             columnWrapperStyle={styles.productRow}
             contentContainerStyle={styles.featuredGrid}

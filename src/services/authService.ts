@@ -1,4 +1,4 @@
-import { authApiClient, wcApiClient } from './apiClient';
+import { authApiClient, wcApiClient, wpApiClient } from './apiClient';
 
 /**
  * Service for Authentication operations (Login / JWT)
@@ -38,17 +38,34 @@ export const authService = {
   },
 
   /**
-   * Request password reset email from backend
+   * 1. Request OTP/Link (Forgot Password)
    */
   async forgotPassword(email: string) {
     try {
-      // Backend developer needs to create this custom endpoint: /wp-json/seasonbazar/v1/forgot-password
-      const response = await wcApiClient.post('/seasonbazar/v1/forgot-password', {
+      const response = await wpApiClient.post('/seasonbazar/v1/forgot-password', {
         user_login: email,
       });
       return response.data;
     } catch (error: any) {
       console.log('Forgot Password API Error:', error.response?.data || error.message);
+      throw error.response?.data || error;
+    }
+  },
+
+  /**
+   * 2. Set New Password with OTP
+   */
+  async resetPassword(email: string, otp: string, password: string) {
+    try {
+      // Assuming same namespace for reset
+      const response = await wpApiClient.post('/seasonbazar/v1/reset-password', {
+        email: email,
+        otp: otp,
+        password: password,
+      });
+      return response.data;
+    } catch (error: any) {
+      console.log('Reset Password API Error:', error.response?.data || error.message);
       throw error.response?.data || error;
     }
   },

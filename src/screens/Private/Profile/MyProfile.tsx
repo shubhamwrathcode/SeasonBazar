@@ -13,6 +13,8 @@ import { AppFonts } from '../../../components/Appfonts';
 import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
 import AppHeader from '../../../components/AppHeader';
+import { useAuthStore } from '../../../store/useAuthStore';
+import SimpleToast from 'react-native-simple-toast';
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +28,12 @@ const MENU_ITEMS = [
 
 const MyProfile = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
+  const { user, logout } = useAuthStore();
+
+  const handleLogout = () => {
+    logout();
+    SimpleToast.show('Logged out successfully');
+  };
 
   const renderMenuItem = (item: any) => (
     <TouchableOpacity 
@@ -35,7 +43,7 @@ const MyProfile = ({ navigation }: any) => {
         if (item.id === '1') navigation.navigate('ProfileSettings');
         if (item.id === '2') navigation.navigate('Wishlist');
         if (item.id === '3') navigation.navigate('Compare');
-        if (item.id === '4') navigation.navigate('MyCart');
+        if (item.id === '4') navigation.navigate('MyOrders');
         if (item.id === '5') navigation.navigate('HelpSupport');
       }}
     >
@@ -70,9 +78,13 @@ const MyProfile = ({ navigation }: any) => {
           </View>
 
           <View style={styles.details}>
-            <AppText font={AppFonts.Medium} size={22} color={Colors.white}>Vinayak sharma</AppText>
-            <AppText font={AppFonts.Regular} size={14} color="rgba(255,255,255,0.8)">vinusharma@gmail.com</AppText>
-            <AppText font={AppFonts.Regular} size={14} color="rgba(255,255,255,0.8)">+91 0987654321</AppText>
+            <AppText font={AppFonts.Medium} size={22} color={Colors.white}>
+               {user?.user_display_name || user?.user_nicename || 'Season Bazar User'}
+            </AppText>
+            <AppText font={AppFonts.Regular} size={14} color="rgba(255,255,255,0.8)">
+               {user?.user_email || 'No email provided'}
+            </AppText>
+            {/* <AppText font={AppFonts.Regular} size={14} color="rgba(255,255,255,0.8)">+91 0987654321</AppText> */}
           </View>
 
           <TouchableOpacity style={styles.editBtn}>
@@ -89,7 +101,7 @@ const MyProfile = ({ navigation }: any) => {
           {MENU_ITEMS.map(renderMenuItem)}
         </View>
 
-        <TouchableOpacity style={styles.logoutBtn}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <View style={styles.logoutIconBg}>
             <Image source={ImageAssets.logout} style={styles.logoutIcon} />
           </View>

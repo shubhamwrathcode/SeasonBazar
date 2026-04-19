@@ -15,6 +15,10 @@ import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
 import LinearGradient from 'react-native-linear-gradient';
 import AppHeader from '../../../components/AppHeader';
+import { productService } from '../../../services/productService';
+import { useCartStore } from '../../../store/useCartStore';
+import { useWishlistStore } from '../../../store/useWishlistStore';
+import SimpleToast from 'react-native-simple-toast';
 
 const { width } = Dimensions.get('window');
 
@@ -27,11 +31,36 @@ const SEARCH_RESULTS = [
   { id: '4', name: 'boat Lunar Discover....', price: '₹1,000', originalPrice: '₹3,000', rating: '4.5', seller: 'Srikant', image: ImageAssets.watch },
 ];
 
-const SearchResults = ({ navigation }: any) => {
+const SearchResults = ({ navigation, route }: any) => {
   const insets = useSafeAreaInsets();
+  const initialQuery = route.params?.query || '';
+  
+  const { addItem } = useCartStore();
+  const { toggleWishlist, isInWishlist } = useWishlistStore();
+  
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const [selectedFilter, setSelectedFilter] = useState('Filter');
-  const bannerData = [1, 2, 3, 4, 5];
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const bannerData = [1]; // Usually static or from a specific promo
+
+  React.useEffect(() => {
+    handleSearch(searchQuery);
+  }, []);
+
+  const handleSearch = async (query: string) => {
+    try {
+      setLoading(true);
+      const res = await productService.getProducts({ search: query, per_page: 20 });
+      setProducts(res);
+    } catch (error) {
+       console.log('Search API Error:', error);
+    } finally {
+       setLoading(false);
+    }
+  };
 
   const renderBannerItem = () => (
     <View style={styles.bannerSlide}>
@@ -98,47 +127,69 @@ const SearchResults = ({ navigation }: any) => {
     </View>
   );
 
-  const renderProduct = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      style={styles.productCard}
-      onPress={() => navigation.navigate('ProductDetail', { product: item })}
-    >
-      <View style={styles.productImgContainer}>
-        <Image source={item.image} style={styles.productImg} resizeMode="contain" />
-        <TouchableOpacity style={styles.heartBtn}>
-          <Image source={ImageAssets.heart} style={styles.heartIcon} />
-        </TouchableOpacity>
-        <View style={styles.ratingBadge}>
-          <Image source={ImageAssets.star1} style={styles.starIconSmall} />
-          <AppText font={AppFonts.SemiBold} size={10} color={Colors.black}>{item.rating}</AppText>
-        </View>
-        <TouchableOpacity style={styles.addBtn}>
-          <Image source={ImageAssets.cart} style={styles.addIcon} />
-          <AppText font={AppFonts.Medium} size={10} color={Colors.black}>Add</AppText>
-        </TouchableOpacity>
-      </View>
+  const renderProduct = ({ item }: { item: any }) => {
+    const isFav = isInWishlist(item.id);
 
-      <View style={styles.productInfo}>
-        <AppText font={AppFonts.Regular} size={14} color={Colors.black} numberOfLines={1}>
-          {item.name}
-        </AppText>
-        <View style={styles.priceRow}>
-          <AppText font={AppFonts.Regular} size={11} color={Colors.black30} style={styles.oldPrice}>
-            {item.originalPrice}
-          </AppText>
-          <AppText font={AppFonts.SemiBold} size={14} color={Colors.black}>
-            {item.price}
-          </AppText>
-        </View>
-        <View style={styles.sellerRow}>
-          <View style={styles.sellerAvatar}>
-            <Image source={ImageAssets.profileBottom} style={styles.sellerIcon} />
+    return (
+      <TouchableOpacity 
+        style={styles.productCard}
+        onPress={() => navigation.navigate('ProductDetail', { product: item })}
+      >
+        <View style={styles.productImgContainer}>
+          <Image source={item.images?.[0]?.src ? { uri: item.images[0].src } : ImageAssets.watch} style={styles.productImg} resizeMode="contain" />
+          <TouchableOpacity 
+            style={styles.heartBtn}
+            onPress={() => toggleWishlist(item)}
+          >
+            <Image 
+              source={ImageAssets.wishlist} 
+              style={[styles.heartIcon, isFav && { tintColor: Colors.primary }]} 
+            />
+          </TouchableOpacity>
+          <View style={styles.ratingBadge}>
+            <Image source={ImageAssets.star1} style={styles.starIconSmall} />
+            <AppText font={AppFonts.SemiBold} size={10} color={Colors.black}>{item.average_rating || '4.5'}</AppText>
           </View>
-          <AppText font={AppFonts.Regular} size={13} color={Colors.black}>{item.seller}</AppText>
+          <TouchableOpacity 
+            style={styles.addBtn}
+            onPress={() => {
+              addItem(item);
+              SimpleToast.show('Added to Cart');
+            }}
+          >
+            <Image source={ImageAssets.cart} style={styles.addIcon} />
+            <AppText font={AppFonts.Medium} size={10} color={Colors.black}>Add</AppText>
+          </TouchableOpacity>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+
+        <View style={styles.productInfo}>
+          <AppText font={AppFonts.Regular} size={14} color={Colors.black} numberOfLines={1}>
+            {item.name}
+          </AppText>
+          <View style={styles.priceRow}>
+            {item.regular_price && item.regular_price !== item.price && (
+              <AppText font={AppFonts.Regular} size={11} color={Colors.black30} style={styles.oldPrice}>
+                ₹{item.regular_price}
+              </AppText>
+            )}
+            <AppText font={AppFonts.SemiBold} size={14} color={Colors.black}>
+              ₹{item.price}
+            </AppText>
+          </View>
+          <View style={styles.sellerRow}>
+            <View style={styles.sellerAvatar}>
+              {item.store?.vendor_avatar && (
+                 <Image source={{ uri: item.store.vendor_avatar }} style={{ width: 14, height: 14, borderRadius: 7 }} />
+              )}
+            </View>
+            <AppText font={AppFonts.Regular} size={13} color={Colors.black}>
+              {item.store?.shop_name || 'Season Bazar'}
+            </AppText>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -149,14 +200,24 @@ const SearchResults = ({ navigation }: any) => {
         onFilter={() => navigation.navigate('FilterScreen')}
       />
       <FlatList
-        data={SEARCH_RESULTS}
+        data={products}
         renderItem={renderProduct}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         numColumns={2}
         ListHeaderComponent={() => (
           <>
             {renderBanner()}
             {renderFilters()}
+            {loading && (
+               <View style={{ padding: 20, alignItems: 'center' }}>
+                  <AppText font={AppFonts.Medium} color={Colors.textGrey}>Searching...</AppText>
+               </View>
+            )}
+            {!loading && products.length === 0 && (
+               <View style={{ padding: 50, alignItems: 'center' }}>
+                  <AppText font={AppFonts.Medium} color={Colors.textGrey}>No products found for "{searchQuery}"</AppText>
+               </View>
+            )}
           </>
         )}
         contentContainerStyle={styles.listContent}
