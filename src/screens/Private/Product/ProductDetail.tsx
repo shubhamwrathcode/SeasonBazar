@@ -14,13 +14,14 @@ import { Colors } from '../../../components/colors';
 import { AppFonts } from '../../../components/Appfonts';
 import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
+import ShimmerPlaceholder from '../../../components/ShimmerPlaceholder';
 
 import LinearGradient from 'react-native-linear-gradient';
 import { useCartStore } from '../../../store/useCartStore';
 import { useWishlistStore } from '../../../store/useWishlistStore';
+import { useCompareStore } from '../../../store/useCompareStore';
 import { productService } from '../../../services/productService';
-import SimpleToast from 'react-native-simple-toast';
-
+import Toast from 'react-native-simple-toast';
 const { width } = Dimensions.get('window');
 
 const HIGHLIGHTS = [
@@ -37,13 +38,17 @@ const SIMILAR_PRODUCTS = [
 ];
 
 const ProductDetail = ({ navigation, route }: any) => {
-  const { product } = route.params || {};
+  const { product: initialProduct } = route.params || {};
+  const [product, setProduct] = useState<any>(initialProduct);
+  const [fetchingDetail, setFetchingDetail] = useState(false);
+  
   const insets = useSafeAreaInsets();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const mainListRef = React.useRef<FlatList>(null);
+  const mainListRef = React.useRef<FlatList<any>>(null);
 
-  const { addItem } = useCartStore();
+  const { addItem, syncCart, items } = useCartStore();
   const { toggleWishlist, isInWishlist } = useWishlistStore();
+  const { addToCompare } = useCompareStore();
   const isFav = isInWishlist(product?.id);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
@@ -51,17 +56,54 @@ const ProductDetail = ({ navigation, route }: any) => {
   const [loadingSimilar, setLoadingSimilar] = useState(false);
 
   React.useEffect(() => {
-    if (product?.id) {
+    syncCart(); // Fetch latest cart and Nonce
+    if (initialProduct?.id) {
+      fetchLatestDetails();
       fetchReviews();
       fetchSimilarProducts();
     }
-  }, [product?.id]);
+  }, [initialProduct?.id]);
+
+  const fetchLatestDetails = async () => {
+    try {
+      setFetchingDetail(true);
+      const res = await productService.getProductById(initialProduct.id);
+      console.log('--- LATEST PRODUCT DETAIL ---', res);
+      setProduct(res);
+
+      if (res.type === 'variable') {
+         try {
+           const variations = await productService.getProductVariations(res.id);
+           if (variations && variations.length > 0) {
+              const firstVar = variations[0];
+              const mappedAttrs = (firstVar.attributes || []).map((a: any) => ({
+                  attribute: a.name || '', 
+                  slug: a.slug || '',
+                  value: a.option || a.value || ''
+              }));
+              
+              setProduct((prev: any) => ({
+                ...prev,
+                default_variation_id: firstVar.id,
+                default_variation_attributes: mappedAttrs
+              }));
+           }
+         } catch (err) {
+           console.log('Error fetching variations:', err);
+         }
+      }
+    } catch (error) {
+      console.log('Error fetching detail:', error);
+    } finally {
+      setFetchingDetail(false);
+    }
+  };
 
   const fetchReviews = async () => {
     try {
+      if (!initialProduct?.id) return;
       setLoadingReviews(true);
-      const res = await productService.getProductReviews(product.id);
-      console.log('--- PRODUCT REVIEWS API RESPONSE ---', res);
+      const res = await productService.getProductReviews(initialProduct.id);
       setReviews(res);
     } catch (error) {
       console.log('Reviews Error:', error);
@@ -72,10 +114,11 @@ const ProductDetail = ({ navigation, route }: any) => {
 
   const fetchSimilarProducts = async () => {
     try {
+      if (!initialProduct?.id) return;
       setLoadingSimilar(true);
-      if (product?.related_ids && product.related_ids.length > 0) {
-        const res = await productService.getProducts({ include: product.related_ids.slice(0, 10).join(',') });
-        console.log('--- SIMILAR PRODUCTS API RESPONSE ---', res);
+      const relatedIds = initialProduct?.related_ids || product?.related_ids;
+      if (relatedIds && relatedIds.length > 0) {
+        const res = await productService.getProducts({ include: relatedIds.slice(0, 10).join(',') });
         setSimilarProducts(res);
       }
     } catch (error) {
@@ -107,13 +150,13 @@ const ProductDetail = ({ navigation, route }: any) => {
   const getDeliveryInfo = () => {
     // Check if Dokan processing time exists in meta_data
     const processingTime = product?.meta_data?.find((m: any) => m.key === '_dps_processing_time')?.value;
-    
+
     if (processingTime && processingTime !== '') {
       return `Processing: ${processingTime} | Delivery Soon`;
     }
 
     const date = new Date();
-    date.setDate(date.getDate() + 5); 
+    date.setDate(date.getDate() + 5);
     const formattedDate = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
     return `Delivery by ${formattedDate} | 5-7 Working Days`;
   };
@@ -158,7 +201,7 @@ const ProductDetail = ({ navigation, route }: any) => {
         <View style={styles.ratingRowSmall}>
           <Image source={ImageAssets.star1} style={styles.starIconTiny} />
           <AppText font={AppFonts.SemiBold} size={10} color={Colors.black}>
-            {item.average_rating || '4.0'}
+            {parseFloat(item.average_rating) > 0 ? parseFloat(item.average_rating).toFixed(1) : '4.5'}
           </AppText>
         </View>
         <AppText font={AppFonts.Regular} size={13} color={Colors.black} numberOfLines={1}>
@@ -190,16 +233,31 @@ const ProductDetail = ({ navigation, route }: any) => {
             <Image source={ImageAssets.backIcon} style={styles.backIcon} />
           </TouchableOpacity>
 
-          {/* Wishlist Button aligned with Back Button */}
-          <TouchableOpacity
-            onPress={() => toggleWishlist(product)}
-            style={styles.headerWishlistBtn}
-          >
-            <Image
-              source={ImageAssets.wishlist}
-              style={[styles.headerWishlistIcon, { tintColor: isFav ? Colors.primary : Colors.black30 }]}
-            />
-          </TouchableOpacity>
+          {/* Wishlist & Compare Buttons aligned with Back Button */}
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity
+              onPress={() => {
+                addToCompare(product);
+                Toast.show('Added to Compare List', Toast.SHORT);
+              }}
+              style={styles.headerWishlistBtn}
+            >
+              <Image
+                source={ImageAssets.compare}
+                style={[styles.headerWishlistIcon, { tintColor: Colors.primary }]}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => toggleWishlist(product)}
+              style={styles.headerWishlistBtn}
+            >
+              <Image
+                source={ImageAssets.wishlist}
+                style={[styles.headerWishlistIcon, { tintColor: isFav ? Colors.primary : Colors.black30 }]}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <LinearGradient
@@ -216,6 +274,12 @@ const ProductDetail = ({ navigation, route }: any) => {
             onMomentumScrollEnd={(e) => {
               const index = Math.round(e.nativeEvent.contentOffset.x / width);
               setActiveImageIndex(index);
+            }}
+            onScrollToIndexFailed={(info) => {
+              const wait = new Promise((resolve: any) => setTimeout(resolve, 500));
+              wait.then(() => {
+                mainListRef.current?.scrollToIndex({ index: info.index, animated: true });
+              });
             }}
             keyExtractor={(_, i) => i.toString()}
           />
@@ -273,10 +337,12 @@ const ProductDetail = ({ navigation, route }: any) => {
                   <View style={styles.highlightIconBg}>
                     <Image source={ImageAssets.star1} style={styles.highlightIcon} />
                   </View>
-                  <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
-                    <AppText font={AppFonts.Medium}>{attr.name}: </AppText>
-                    {attr.options.join(', ')}
-                  </AppText>
+                  <View style={{ flex: 1 }}>
+                    <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
+                      <AppText font={AppFonts.Medium}>{attr.name}: </AppText>
+                      {attr.options.join(', ')}
+                    </AppText>
+                  </View>
                 </View>
               ))
             ) : product?.categories ? (
@@ -285,9 +351,11 @@ const ProductDetail = ({ navigation, route }: any) => {
                   <View style={styles.highlightIconBg}>
                     <Image source={ImageAssets.star1} style={styles.highlightIcon} />
                   </View>
-                  <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
-                    Part of <AppText font={AppFonts.Medium}>{cat.name}</AppText> Collection
-                  </AppText>
+                  <View style={{ flex: 1 }}>
+                    <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
+                      Part of <AppText font={AppFonts.Medium}>{cat.name}</AppText> Collection
+                    </AppText>
+                  </View>
                 </View>
               ))
             ) : (
@@ -295,7 +363,9 @@ const ProductDetail = ({ navigation, route }: any) => {
                 <View style={styles.highlightIconBg}>
                   <Image source={ImageAssets.delivery} style={styles.highlightIcon} />
                 </View>
-                <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>Premium Quality Guaranteed</AppText>
+                <View style={{ flex: 1 }}>
+                  <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>Premium Quality Guaranteed</AppText>
+                </View>
               </View>
             )}
           </View>
@@ -323,18 +393,24 @@ const ProductDetail = ({ navigation, route }: any) => {
           <View style={styles.deliveryRow}>
             <Image source={ImageAssets.shipping} style={styles.deliveryIcon} />
             <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
-              {product?.shipping_required 
+              {product?.shipping_required
                 ? getDeliveryInfo()
                 : 'Instant Digital Delivery via Email'}
             </AppText>
           </View>
 
-          {/* Similar Products */}
-          <AppText font={AppFonts.Medium} size={18} color={Colors.black} style={[styles.sectionTitle, { marginBottom: 15 }]}>
-            Similar Products
-          </AppText>
           {loadingSimilar ? (
-            <AppText size={14} color={Colors.textGrey}>Loading similar items...</AppText>
+            <View style={{ flexDirection: 'row' }}>
+              {[1, 2, 3].map(i => (
+                <View key={i} style={[styles.similarCard, { marginRight: 15 }]}>
+                  <ShimmerPlaceholder height={150} borderRadius={0} />
+                  <View style={{ padding: 10 }}>
+                    <ShimmerPlaceholder height={12} width="80%" />
+                    <ShimmerPlaceholder height={14} width="40%" style={{ marginTop: 8 }} />
+                  </View>
+                </View>
+              ))}
+            </View>
           ) : similarProducts.length > 0 ? (
             <FlatList
               data={similarProducts}
@@ -352,7 +428,18 @@ const ProductDetail = ({ navigation, route }: any) => {
             User Reviews ({reviews.length})
           </AppText>
           {loadingReviews ? (
-            <AppText size={14} color={Colors.textGrey}>Loading reviews...</AppText>
+            <View>
+              {[1, 2].map(i => (
+                <View key={i} style={[styles.reviewCard, { marginBottom: 10 }]}>
+                  <View style={styles.reviewHeader}>
+                    <ShimmerPlaceholder height={14} width="30%" />
+                    <ShimmerPlaceholder height={14} width="15%" />
+                  </View>
+                  <ShimmerPlaceholder height={12} width="90%" style={{ marginTop: 8 }} />
+                  <ShimmerPlaceholder height={12} width="70%" style={{ marginTop: 5 }} />
+                </View>
+              ))}
+            </View>
           ) : reviews.length > 0 ? (
             reviews.map((rev) => (
               <View key={rev.id} style={styles.reviewCard}>
@@ -373,15 +460,38 @@ const ProductDetail = ({ navigation, route }: any) => {
 
       {/* Footer Buttons */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 10 }]}>
-        <TouchableOpacity
-          style={styles.cartBtn}
-          onPress={() => {
-            addItem(product);
-            SimpleToast.show('Added to Cart');
-          }}
-        >
-          <AppText font={AppFonts.Medium} size={18} color={Colors.primary}>Add to Cart</AppText>
-        </TouchableOpacity>
+        {/* Stock Status Check */}
+        {product?.stock_status === 'outofstock' ? (
+           <View style={[styles.cartBtn, { backgroundColor: '#ffebee', borderColor: '#ef5350' }]}>
+             <AppText font={AppFonts.Medium} size={18} color="#ef5350">Out of Stock</AppText>
+           </View>
+        ) : items.find(i => i.id === product?.id) ? (
+          <TouchableOpacity
+            style={[styles.cartBtn, { backgroundColor: '#F1F4FF', borderColor: Colors.primary }]}
+            onPress={() => navigation.navigate('MyCart')}
+          >
+            <AppText font={AppFonts.Medium} size={18} color={Colors.primary}>Go to Cart</AppText>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.cartBtn, (product?.type === 'variable' && !product?.default_variation_id) ? { opacity: 0.5 } : {}]}
+            disabled={product?.type === 'variable' && !product?.default_variation_id}
+            onPress={async () => {
+              console.log('--- ADDING TO CART --- PRODUCT STATE:', product);
+              try {
+                await addItem(product);
+                Toast.show('Added to Cart', Toast.SHORT);
+              } catch (error: any) {
+                const msg = error.message || 'Error adding to cart';
+                Toast.show(msg, Toast.LONG);
+              }
+            }}
+          >
+            <AppText font={AppFonts.Medium} size={18} color={Colors.primary}>
+              {(product?.type === 'variable' && !product?.default_variation_id) ? 'Loading...' : 'Add to Cart'}
+            </AppText>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.buyBtn}
           onPress={() => {
@@ -526,8 +636,9 @@ const styles = StyleSheet.create({
   },
   highlightRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 15,
+    marginBottom: 12,
   },
   highlightIconBg: {
     width: 35,

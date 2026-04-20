@@ -19,12 +19,14 @@ import MyProfile from '../screens/Private/Profile/MyProfile';
 import ProfileSettings from '../screens/Private/Profile/ProfileSettings';
 import Wishlist from '../screens/Private/Profile/Wishlist';
 import MyOrders from '../screens/Private/Profile/MyOrders';
+import ManageAddresses from '../screens/Private/Profile/ManageAddresses';
 import HelpSupport from '../screens/Private/Support/HelpSupport';
 import Compare from '../screens/Private/Product/Compare';
 import MyCart from '../screens/Private/Cart/MyCart';
 import SubscribePlan from '../screens/Private/Vendor/SubscribePlan';
 import PlanDetail from '../screens/Private/Vendor/PlanDetail';
 import CustomerCheckout from '../screens/Private/Cart/Checkout';
+import OrderSuccess from '../screens/Private/Cart/OrderSuccess';
 import VendorCheckout from '../screens/Private/Vendor/Checkout';
 import PaymentMethod from '../screens/Private/Vendor/PaymentMethod';
 import VendorHome from '../screens/Private/Vendor/VendorHome';
@@ -70,6 +72,8 @@ export type RootStackParamList = {
   SubscribePlan: undefined;
   PlanDetail: undefined;
   Checkout: undefined;
+  OrderSuccess: { orderId: string };
+  ManageAddresses: undefined;
   VendorCheckout: undefined;
   PaymentMethod: undefined;
   VendorMain: undefined;
@@ -154,12 +158,13 @@ const AppStack = () => {
           <Stack.Screen name="AllCategories" component={AllCategories} />
           <Stack.Screen name="SearchResults" component={SearchResults} />
           <Stack.Screen name="Checkout" component={CustomerCheckout} />
+          <Stack.Screen name="OrderSuccess" component={OrderSuccess} />
           <Stack.Screen name="FilterScreen" component={FilterScreen} />
           <Stack.Screen name="ProductDetail" component={ProductDetail} />
           <Stack.Screen name="ProfileSettings" component={ProfileSettings} />
           <Stack.Screen name="Wishlist" component={Wishlist} />
           <Stack.Screen name="MyOrders" component={MyOrders} />
-          <Stack.Screen name="HelpSupport" component={HelpSupport} />
+          <Stack.Screen name="ManageAddresses" component={ManageAddresses} />
           <Stack.Screen name="Compare" component={Compare} />
           <Stack.Screen name="MyCart" component={MyCart} />
           <Stack.Screen name="SubscribePlan" component={SubscribePlan} />

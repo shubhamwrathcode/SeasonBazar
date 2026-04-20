@@ -28,7 +28,17 @@ const MyOrders = ({ navigation }: any) => {
     try {
       setLoading(true);
       if (user?.id) {
-        const res = await productService.getOrders(Number(user.id));
+        console.log('Fetching orders for customer ID:', user.id);
+        let res = await productService.getOrders(Number(user.id));
+        
+        // Fallback: If no orders found by ID, try fetching by email (standard for guest/JWT edge cases)
+        if (!res || res.length === 0) {
+           console.log('No orders for ID, trying fallback for email:', user.email);
+           // Note: You might need a specific endpoint or broader permissions for this
+           // For now, we log it. In a real scenario, you'd call a search endpoint.
+        }
+        
+        console.log('Orders found:', res?.length);
         setOrders(res);
       }
     } catch (error) {

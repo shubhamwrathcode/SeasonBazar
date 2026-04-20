@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -6,6 +6,7 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../components/colors';
@@ -14,7 +15,9 @@ import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
 import AppHeader from '../../../components/AppHeader';
 import { useAuthStore } from '../../../store/useAuthStore';
-import SimpleToast from 'react-native-simple-toast';
+import { productService } from '../../../services/productService';
+import Toast from 'react-native-simple-toast';
+
 
 const { width } = Dimensions.get('window');
 
@@ -22,22 +25,42 @@ const MENU_ITEMS = [
   { id: '1', title: 'My Account', sub: 'Update Personal Information', icon: ImageAssets.profileBottom },
   { id: '2', title: 'Wishlist', sub: 'Manage your listing', icon: ImageAssets.wishlist1 },
   { id: '3', title: 'Compare', sub: 'Manage your Compare', icon: ImageAssets.compare },
-  { id: '4', title: 'Track your Order', sub: 'Manage your Compare', icon: ImageAssets.trackorder },
-  { id: '5', title: 'Help Center', sub: 'Manage your Help Center', icon: ImageAssets.helpcenter },
+  { id: '4', title: 'Track your Order', sub: 'Manage your orders', icon: ImageAssets.orders },
+  { id: '6', title: 'Manage Addresses', sub: 'Billing & Shipping addresses', icon: ImageAssets.location },
+  { id: '5', title: 'Help Center', sub: 'Get support directly', icon: ImageAssets.helpcenter },
 ];
 
 const MyProfile = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
+  const [customer, setCustomer] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchCustomerProfile();
+  }, []);
+
+  const fetchCustomerProfile = async () => {
+    if (!user?.id) return;
+    try {
+      setLoading(true);
+      const data = await productService.getCustomer(Number(user.id));
+      setCustomer(data);
+    } catch (error) {
+      console.log('Fetch Profile Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
-    SimpleToast.show('Logged out successfully');
+    Toast.show('Logged out successfully', Toast.SHORT);
   };
 
   const renderMenuItem = (item: any) => (
-    <TouchableOpacity 
-      key={item.id} 
+    <TouchableOpacity
+      key={item.id}
       style={styles.menuCard}
       onPress={() => {
         if (item.id === '1') navigation.navigate('ProfileSettings');
@@ -45,6 +68,7 @@ const MyProfile = ({ navigation }: any) => {
         if (item.id === '3') navigation.navigate('Compare');
         if (item.id === '4') navigation.navigate('MyOrders');
         if (item.id === '5') navigation.navigate('HelpSupport');
+        if (item.id === '6') navigation.navigate('ManageAddresses');
       }}
     >
       <View style={styles.menuLeft}>
@@ -79,17 +103,16 @@ const MyProfile = ({ navigation }: any) => {
 
           <View style={styles.details}>
             <AppText font={AppFonts.Medium} size={22} color={Colors.white}>
-               {user?.user_display_name || user?.user_nicename || 'Season Bazar User'}
+              {customer ? `${customer.first_name} ${customer.last_name}` : user?.first_name ? `${user.first_name} ${user.last_name}` : 'Season Bazar User'}
             </AppText>
             <AppText font={AppFonts.Regular} size={14} color="rgba(255,255,255,0.8)">
-               {user?.user_email || 'No email provided'}
+              {customer?.email || user?.email || 'No email provided'}
             </AppText>
-            {/* <AppText font={AppFonts.Regular} size={14} color="rgba(255,255,255,0.8)">+91 0987654321</AppText> */}
           </View>
 
-          <TouchableOpacity style={styles.editBtn}>
+          {/* <TouchableOpacity style={styles.editBtn}>
             <Image source={ImageAssets.edit} style={styles.editIcon} />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </View>
 
@@ -207,7 +230,6 @@ const styles = StyleSheet.create({
   menuIcon: {
     width: 22,
     height: 22,
-    tintColor: '#2E4475',
   },
   menuText: {
     gap: 2,

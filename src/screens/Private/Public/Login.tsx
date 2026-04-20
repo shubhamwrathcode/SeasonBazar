@@ -48,24 +48,51 @@ const Login = ({ navigation, route }: any) => {
       console.log('--- Login API Success ---', res);
       console.log('JWT Data:', JSON.stringify(res, null, 2));
 
+      // Robust ID mapping: check for user_id, id, or numeric string conversions
+      let userId = res.user_id || res.id || (res.user?.id) || 0;
+
+      // Fallback: If ID is still 0, try decoding the JWT token (middle part)
+      if (!userId && res.token) {
+        try {
+          const base64Url = res.token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+
+          // Pure JS Base64 to Unicode decoder
+          const decodedStr = (() => {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+            let str = base64.replace(/=+$/, '');
+            let output = '';
+            if (str.length % 4 === 1) throw new Error('Invalid base64');
+            for (let bc = 0, bs, buffer, idx = 0; buffer = str.charAt(idx++);
+              ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
+                bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+            ) {
+              buffer = chars.indexOf(buffer);
+            }
+            return output;
+          })();
+
+          const decoded = JSON.parse(decodedStr);
+          userId = decoded.data?.user?.id || decoded.id || 0;
+          console.log('--- ID Recovered from JWT Token ---', userId);
+        } catch (jwtError) {
+          console.log('JWT Decode Fallback Error:', jwtError);
+        }
+      }
+
+      console.log('--- Final Mapped User ID ---', userId);
+
       // Mapping API response to Auth Store structure
       setAuth({
-        id: res.user_id || res.id || 0,
+        id: Number(userId),
         email: res.user_email || res.email || '',
         first_name: res.user_display_name || res.user_nicename || '',
         last_name: '',
-        role: role, // 'customer' or 'vendor'
+        role: role,
         token: res.token,
       });
 
       Toast.show('Welcome back!', Toast.SHORT);
-
-      // Navigate based on role
-      if (role === 'vendor') {
-        navigation.navigate('Main'); // Or Vendor Dashboard if separate
-      } else {
-        navigation.navigate('Main');
-      }
     } catch (error: any) {
       console.log('Login Error:', error);
       Toast.show(error.message || 'Invalid username or password', Toast.SHORT);

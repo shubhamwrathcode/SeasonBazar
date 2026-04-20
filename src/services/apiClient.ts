@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { API_CONFIG } from './apiConfig';
+import { useAuthStore } from '../store/useAuthStore';
 
 /**
  * Standard WooCommerce API Client with Basic Auth
@@ -18,10 +19,19 @@ export const wcApiClient = axios.create({
 
 /**
  * Standard WordPress API Client (Base /wp-json)
- * For custom plugins or standard WP endpoints
  */
 export const wpApiClient = axios.create({
-  baseURL: API_CONFIG.BASE_URL.replace('/wc/v3', ''), // Removes /wc/v3 if present
+  baseURL: API_CONFIG.BASE_URL.replace('/wc/v3', ''),
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+/**
+ * WooCommerce Store API Client
+ */
+export const storeApiClient = axios.create({
+  baseURL: API_CONFIG.BASE_URL.replace('/wc/v3', '/wc/store/v1'),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -74,6 +84,38 @@ wcApiClient.interceptors.response.use(responseLogger, errorLogger);
 // Apply to WordPress Generic Client
 wpApiClient.interceptors.request.use(requestLogger);
 wpApiClient.interceptors.response.use(responseLogger, errorLogger);
+
+// Global store for the Store API Nonce
+let storeApiNonce: string | null = null;
+
+export const setStoreApiNonce = (nonce: string) => {
+  storeApiNonce = nonce;
+  console.log('--- Store API Nonce Updated ---', nonce);
+};
+
+// Apply to Store API Client
+storeApiClient.interceptors.request.use(async (config) => {
+  requestLogger(config);
+  
+  // Attach user token from AuthStore to authorize persistent cart
+  const { user } = useAuthStore.getState();
+  if (user?.token) {
+    config.headers.Authorization = `Bearer ${user.token}`;
+    console.log('--- Attaching Bearer Token to Store API ---');
+  }
+
+  // Attach dynamic Nonce if we have one
+  if (storeApiNonce) {
+    config.headers['Nonce'] = storeApiNonce;
+    config.headers['X-WC-Store-API-Nonce'] = storeApiNonce;
+    console.log('--- ATTACHING NONCE TO REQUEST ---', storeApiNonce);
+  } else {
+    console.log('--- NO NONCE TO ATTACH ---');
+  }
+  
+  return config;
+});
+storeApiClient.interceptors.response.use(responseLogger, errorLogger);
 
 // Apply to Auth Client
 authApiClient.interceptors.request.use(async (config) => {

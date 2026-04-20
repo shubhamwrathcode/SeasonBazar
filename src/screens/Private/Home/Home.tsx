@@ -19,6 +19,10 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { productService } from '../../../services/productService';
 import { useAuthStore } from '../../../store/useAuthStore';
+import { customerService } from '../../../services/customerService';
+import { useCartStore } from '../../../store/useCartStore';
+import Toast from 'react-native-simple-toast';
+import ShimmerPlaceholder from '../../../components/ShimmerPlaceholder';
 
 const { width } = Dimensions.get('window');
 
@@ -27,26 +31,56 @@ const Home = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { user }: any = useAuthStore();
+  const { addItem, items } = useCartStore();
+  const isInCart = (id: number) => items.some(item => item.id === id);
   const [activeTab, setActiveTab] = React.useState('All');
   const [activeBannerIndex, setActiveBannerIndex] = React.useState(0);
   const [products, setProducts] = React.useState<any[]>([]);
   const [featuredProducts, setFeaturedProducts] = React.useState<any[]>([]);
   const [wooCategories, setWooCategories] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [userAddress, setUserAddress] = React.useState<string>('');
 
   // const bannerData = [1, 2, 3, 4, 5];
 
   React.useEffect(() => {
     fetchInitialData();
-  }, []);
+    if (user?.id) {
+      fetchUserLocation();
+    }
+  }, [user?.id]);
+
+  const fetchUserLocation = async () => {
+    try {
+      const data = await customerService.getCustomer(user.id);
+      if (data?.shipping?.city) {
+        setUserAddress(`${data.shipping.city}${data.shipping.state ? ', ' + data.shipping.state : ''}`);
+      } else if (data?.billing?.city) {
+        setUserAddress(`${data.billing.city}${data.billing.state ? ', ' + data.billing.state : ''}`);
+      }
+    } catch (error) {
+      console.log('Error fetching location:', error);
+    }
+  };
+
+  React.useEffect(() => {
+    if (activeTab === 'All') {
+      fetchProducts('All');
+    } else {
+      const selectedCat = wooCategories.find(c => c.name === activeTab);
+      if (selectedCat) {
+        fetchProducts(selectedCat.id);
+      }
+    }
+  }, [activeTab]);
 
   const fetchProducts = async (catId?: string | number, search?: string) => {
     try {
       setLoading(true);
-      const res = await productService.getProducts({ 
+      const res = await productService.getProducts({
         category: catId !== 'All' ? catId : undefined,
         search: search || undefined,
-        per_page: 20 
+        per_page: 20
       });
       console.log('--- HOME PRODUCTS API RESPONSE ---', res);
       setProducts(res);
@@ -90,7 +124,7 @@ const Home = () => {
       <View style={styles.locationRow}>
         <Image source={ImageAssets.location} style={styles.headerIcon} />
         <AppText font={AppFonts.Regular} size={14} color={Colors.white} style={styles.locationText} numberOfLines={1}>
-          {user ? `Deliver to ${user.user_display_name || user.user_email}` : 'Login to see your address'}
+          {user ? (userAddress ? `Deliver to ${userAddress}` : `Hi, ${user.first_name || 'User'}`) : 'Login to see your address'}
         </AppText>
       </View>
 
@@ -172,7 +206,16 @@ const Home = () => {
   );
 
   const renderBanner = () => {
-    const displayBanners = featuredProducts.length > 0 ? featuredProducts : [1]; // fallback
+    if (loading) {
+      return (
+        <View style={styles.bannerContainer}>
+          <ShimmerPlaceholder height={180} borderRadius={20} />
+        </View>
+      );
+    }
+
+    const displayBanners = featuredProducts.length > 0 ? featuredProducts : [];
+    if (displayBanners.length === 0) return null;
 
     return (
       <View style={styles.bannerContainer}>
@@ -213,16 +256,20 @@ const Home = () => {
       </View>
       <View style={styles.categoryGrid}>
         {loading ? (
-          // Placeholder for Categories
+          // Shimmer Placeholders for Categories
           [1, 2, 3, 4, 5, 6].map((i) => (
             <View key={i} style={styles.categoryItem}>
-              <View style={[styles.categoryImgBg, { backgroundColor: '#F0F0F0' }]} />
-              <View style={[styles.categoryName, { height: 10, width: '60%', backgroundColor: '#EEE', marginTop: 10, alignSelf: 'center' }]} />
+              <ShimmerPlaceholder height={100} borderRadius={20} />
+              <ShimmerPlaceholder height={12} width="60%" style={{ marginTop: 10, alignSelf: 'center' }} />
             </View>
           ))
         ) : (
           wooCategories.slice(0, 6).map((item) => (
-            <View key={item.id} style={styles.categoryItem}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.categoryItem}
+              onPress={() => (navigation as any).navigate('SearchResults', { categoryId: item.id, categoryName: item.name })}
+            >
               <View style={styles.categoryImgBg}>
                 <Image
                   source={item.image?.src ? { uri: item.image.src } : ImageAssets.uncheck}
@@ -233,7 +280,7 @@ const Home = () => {
               <AppText font={AppFonts.Regular} size={12} color={Colors.black} textAlign="center" style={styles.categoryName}>
                 {item.name}
               </AppText>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </View>
@@ -256,11 +303,30 @@ const Home = () => {
           <Image source={ImageAssets.wishlist} style={styles.heartIcon} />
         </TouchableOpacity>
         <View style={styles.ratingBadge}>
-          <AppText font={AppFonts.SemiBold} size={13} color={Colors.black}>⭐ {item.average_rating || '4.5'}</AppText>
+          <AppText font={AppFonts.SemiBold} size={13} color={Colors.black}>
+            ⭐ {parseFloat(item.average_rating) > 0 ? parseFloat(item.average_rating).toFixed(1) : '4.5'}
+          </AppText>
         </View>
-        <TouchableOpacity activeOpacity={0.9} style={styles.floatingAddBtn}>
-          <Image source={ImageAssets.cart} style={styles.bagIcon} />
-          <AppText font={AppFonts.Medium} size={15} color={Colors.primary}>Add</AppText>
+        <TouchableOpacity 
+          activeOpacity={0.9} 
+          style={[styles.floatingAddBtn, isInCart(item.id) && { borderColor: Colors.black30 }]}
+          onPress={() => {
+            if (isInCart(item.id)) {
+              (navigation as any).navigate('MyCart');
+            } else if (item.type === 'variable') {
+              // Redirect to detail page for variable products
+              (navigation as any).navigate('ProductDetail', { product: item });
+              Toast.show('Please select options', Toast.SHORT);
+            } else {
+              addItem(item);
+              Toast.show('Added to Cart', Toast.SHORT);
+            }
+          }}
+        >
+          <Image source={ImageAssets.cart} style={[styles.bagIcon, isInCart(item.id) && { tintColor: Colors.black30 }]} />
+          <AppText font={AppFonts.Medium} size={15} color={isInCart(item.id) ? Colors.black30 : Colors.primary}>
+            {isInCart(item.id) ? 'Added' : 'Add'}
+          </AppText>
         </TouchableOpacity>
       </View>
       <View style={styles.productInfo}>
@@ -337,11 +403,13 @@ const Home = () => {
             <View style={styles.rowAlign}>
               <Image source={ImageAssets.star} style={styles.starIcon} />
               <AppText font={AppFonts.Medium} size={18} color={Colors.black}>Flash Deals</AppText>
-              <View style={styles.timerBadge}>
+              {/* <View style={styles.timerBadge}>
                 <AppText color="#FFB13B" font={AppFonts.SemiBold} size={14}>⚡ 12:43:26</AppText>
-              </View>
+              </View> */}
             </View>
-            <TouchableOpacity><AppText font={AppFonts.Regular} size={16} color={Colors.primary}>See All</AppText></TouchableOpacity>
+            <TouchableOpacity onPress={() => (navigation as any).navigate('SearchResults', { query: 'Flash Deals' })}>
+              <AppText font={AppFonts.Regular} size={16} color={Colors.primary}>See All</AppText>
+            </TouchableOpacity>
           </View>
           {loading ? (
             <FlatList
@@ -350,9 +418,11 @@ const Home = () => {
               data={[1, 2, 3]}
               renderItem={() => (
                 <View style={styles.productCard}>
-                  <View style={[styles.productImageContainer, { backgroundColor: '#F0F0F0' }]} />
-                  <View style={{ height: 15, width: '80%', backgroundColor: '#EEE', marginTop: 20 }} />
-                  <View style={{ height: 15, width: '50%', backgroundColor: '#EEE', marginTop: 10 }} />
+                  <ShimmerPlaceholder height={130} borderRadius={15} />
+                  <View style={{ marginTop: 20 }}>
+                    <ShimmerPlaceholder height={14} width="80%" />
+                    <ShimmerPlaceholder height={16} width="50%" style={{ marginTop: 10 }} />
+                  </View>
                 </View>
               )}
               contentContainerStyle={styles.productList}
@@ -374,17 +444,33 @@ const Home = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <AppText font={AppFonts.Medium} size={18} color={Colors.black}>✨ Featured Products</AppText>
-            <TouchableOpacity><AppText font={AppFonts.Regular} size={14} color={Colors.primary}>See All</AppText></TouchableOpacity>
+            <TouchableOpacity onPress={() => (navigation as any).navigate('SearchResults', { isFeatured: true })}>
+              <AppText font={AppFonts.Regular} size={14} color={Colors.primary}>See All</AppText>
+            </TouchableOpacity>
           </View>
-          <FlatList
-            numColumns={2}
-            data={products.slice(5, 10)}
-            renderItem={({ item }) => renderProduct({ item, isGrid: true })}
-            keyExtractor={(item) => item.id?.toString()}
-            scrollEnabled={false}
-            columnWrapperStyle={styles.productRow}
-            contentContainerStyle={styles.featuredGrid}
-          />
+          {loading ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+              {[1, 2, 3, 4].map(i => (
+                <View key={i} style={[styles.productCardGrid, { marginBottom: 15 }]}>
+                   <ShimmerPlaceholder height={130} borderRadius={15} />
+                   <View style={{ marginTop: 20 }}>
+                     <ShimmerPlaceholder height={14} width="80%" />
+                     <ShimmerPlaceholder height={16} width="50%" style={{ marginTop: 10 }} />
+                   </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <FlatList
+              numColumns={2}
+              data={products.slice(5, 10)}
+              renderItem={({ item }) => renderProduct({ item, isGrid: true })}
+              keyExtractor={(item) => item.id?.toString()}
+              scrollEnabled={false}
+              columnWrapperStyle={styles.productRow}
+              contentContainerStyle={styles.featuredGrid}
+            />
+          )}
         </View>
 
         {renderPromoGrid()}

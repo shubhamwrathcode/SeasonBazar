@@ -19,6 +19,9 @@ interface AppHeaderProps {
   onFilter?: () => void;
   isSearchMode?: boolean;
   placeholder?: string;
+  searchValue?: string;
+  onChangeText?: (text: string) => void;
+  onSubmitEditing?: () => void;
 }
 
 const AppHeader = ({
@@ -27,7 +30,10 @@ const AppHeader = ({
   onSearch,
   onFilter,
   isSearchMode = false,
-  placeholder = "Search..."
+  placeholder = "Search...",
+  searchValue,
+  onChangeText,
+  onSubmitEditing,
 }: AppHeaderProps) => {
   const insets = useSafeAreaInsets();
 
@@ -53,6 +59,10 @@ const AppHeader = ({
                 placeholder={placeholder}
                 placeholderTextColor={Colors.black30}
                 style={styles.searchInput}
+                value={searchValue}
+                onChangeText={onChangeText}
+                onSubmitEditing={onSubmitEditing}
+                returnKeyType="search"
               />
             </View>
             <TouchableOpacity onPress={onFilter} style={styles.filterBtn}>

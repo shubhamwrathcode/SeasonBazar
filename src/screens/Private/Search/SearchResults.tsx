@@ -15,94 +15,188 @@ import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
 import LinearGradient from 'react-native-linear-gradient';
 import AppHeader from '../../../components/AppHeader';
+import ShimmerPlaceholder from '../../../components/ShimmerPlaceholder';
 import { productService } from '../../../services/productService';
 import { useCartStore } from '../../../store/useCartStore';
 import { useWishlistStore } from '../../../store/useWishlistStore';
-import SimpleToast from 'react-native-simple-toast';
+import Toast from 'react-native-simple-toast';
 
 const { width } = Dimensions.get('window');
 
 const FILTERS = ['Sort', 'Filter', 'Price', 'Brands', 'Custom'];
 
-const SEARCH_RESULTS = [
-  { id: '1', name: 'boat Lunar Discover....', price: '₹1,000', originalPrice: '₹3,000', rating: '4.5', seller: 'Srikant', image: ImageAssets.watch },
-  { id: '2', name: 'boat Lunar Discover....', price: '₹1,000', originalPrice: '₹3,000', rating: '4.5', seller: 'Srikant', image: ImageAssets.watch },
-  { id: '3', name: 'boat Lunar Discover....', price: '₹1,000', originalPrice: '₹3,000', rating: '4.5', seller: 'Srikant', image: ImageAssets.watch },
-  { id: '4', name: 'boat Lunar Discover....', price: '₹1,000', originalPrice: '₹3,000', rating: '4.5', seller: 'Srikant', image: ImageAssets.watch },
-];
+
 
 const SearchResults = ({ navigation, route }: any) => {
   const insets = useSafeAreaInsets();
   const initialQuery = route.params?.query || '';
-  
-  const { addItem } = useCartStore();
+  const initialCategoryId = route.params?.categoryId || null;
+  const categoryName = route.params?.categoryName || null;
+  const isFeatured = route.params?.isFeatured || false;
+
+  const { addItem, items } = useCartStore();
+  const isInCart = (id: number) => items.some(item => item.id === id);
   const { toggleWishlist, isInWishlist } = useWishlistStore();
-  
+
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const [selectedFilter, setSelectedFilter] = useState('Filter');
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [products, setProducts] = useState<any[]>([]);
+  const [filters, setFilters] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-
-  const bannerData = [1]; // Usually static or from a specific promo
+  const [banners, setBanners] = useState<any[]>([]);
+  const [loadingBanners, setLoadingBanners] = useState(false);
+  const [page, setPage] = useState(1);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   React.useEffect(() => {
-    handleSearch(searchQuery);
-  }, []);
+    handleSearch(searchQuery, initialCategoryId, 1, isFeatured, filters);
+    fetchBanners();
+  }, [initialCategoryId, isFeatured, filters]);
 
-  const handleSearch = async (query: string) => {
+  const fetchBanners = async () => {
     try {
-      setLoading(true);
-      const res = await productService.getProducts({ search: query, per_page: 20 });
-      setProducts(res);
+      setLoadingBanners(true);
+      // Fetch featured products or related items for the banner
+      const res = await productService.getProducts({ featured: true, per_page: 5 });
+      if (res && res.length > 0) {
+        setBanners(res);
+      } else {
+        // Fallback to top products if no featured
+        const fallback = await productService.getProducts({ per_page: 5 });
+        setBanners(fallback);
+      }
     } catch (error) {
-       console.log('Search API Error:', error);
+      console.log('Banner Fetch Error:', error);
     } finally {
-       setLoading(false);
+      setLoadingBanners(false);
     }
   };
 
-  const renderBannerItem = () => (
-    <View style={styles.bannerSlide}>
-      <Image source={ImageAssets.banner1} style={styles.bannerImage} resizeMode="cover" />
+  const handleSearch = async (query: string, catId?: any, pageNum = 1, featured = false, appliedFilters: any[] = []) => {
+    try {
+      console.log('--- SEARCH PARAMS ---', { query, catId, pageNum, featured, appliedFilters });
+      if (pageNum === 1) setLoading(true);
+      else setLoadingMore(true);
+
+      const params: any = {
+        per_page: 20,
+        page: pageNum
+      };
+      if (query) params.search = query;
+      if (catId) params.category = catId;
+      if (featured) params.featured = true;
+
+      // Apply filters from FilterScreen
+      appliedFilters.forEach(f => {
+        if (f.type === 'category') params.category = f.id;
+        if (f.type === 'price') {
+          if (f.min !== undefined) params.min_price = f.min;
+          if (f.max !== undefined) params.max_price = f.max;
+        }
+      });
+
+      console.log('--- FINAL API PARAMS ---', params);
+      let res = await productService.getProducts(params);
+      console.log('--- API RESPONSE LENGTH ---', res?.length);
+
+      // Local filtering for Rating (as WC API doesn't support it natively for /products)
+      const ratingFilter = appliedFilters.find(f => f.type === 'rating');
+      if (ratingFilter) {
+        res = res.filter((p: any) => parseFloat(p.average_rating || '4.5') >= ratingFilter.value);
+        console.log('--- AFTER RATING FILTER ---', res?.length);
+      }
+
+      if (pageNum === 1) {
+        setProducts(res);
+      } else {
+        setProducts(prev => [...prev, ...res]);
+      }
+
+      if (res.length < 20) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
+    } catch (error) {
+      console.log('Search API Error:', error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setPage(1);
+    handleSearch(searchQuery, initialCategoryId, 1, isFeatured, filters);
+  };
+
+  const handleLoadMore = () => {
+    if (!loadingMore && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      handleSearch(searchQuery, initialCategoryId, nextPage, isFeatured, filters);
+    }
+  };
+
+  const renderBannerItem = ({ item }: { item: any }) => (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => navigation.navigate('ProductDetail', { product: item })}
+      style={styles.bannerSlide}
+    >
+      <Image
+        source={item.images?.[0]?.src ? { uri: item.images[0].src } : ImageAssets.banner1}
+        style={styles.bannerImage}
+        resizeMode="cover"
+      />
       <View style={styles.bannerOverlay}>
-        <AppText font={AppFonts.SemiBold} size={20} color={Colors.white} style={styles.bannerTitle}>
-          Get your Iphone{"\n"}17 Right Now
+        <AppText font={AppFonts.SemiBold} size={20} color={Colors.white} style={styles.bannerTitle} numberOfLines={2}>
+          {item.name || 'Exclusive Offer'}
         </AppText>
-        <AppText font={AppFonts.Regular} size={12} color={Colors.white} style={styles.bannerSubtitle}>
-          Grab the new Iphone 17 now with exclusive deals, limited stock!
+        <AppText font={AppFonts.Regular} size={12} color={Colors.white} style={styles.bannerSubtitle} numberOfLines={2}>
+          {item.short_description?.replace(/<[^>]*>?/gm, '') || 'Check out our latest arrivals and top deals for you!'}
         </AppText>
-        <TouchableOpacity style={styles.bannerBtn}>
-          <AppText font={AppFonts.Regular} size={13} color={Colors.black}>Get It Now  →</AppText>
-        </TouchableOpacity>
+        <View style={styles.bannerBtn}>
+          <AppText font={AppFonts.Regular} size={13} color={Colors.black}>₹{item.price} - Buy Now  →</AppText>
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
-  const renderBanner = () => (
-    <View style={styles.bannerOuterContainer}>
-      <FlatList
-        data={bannerData}
-        renderItem={renderBannerItem}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
-          const index = Math.round(e.nativeEvent.contentOffset.x / (width - 30));
-          setActiveBannerIndex(index);
-        }}
-        keyExtractor={(_, i) => i.toString()}
-      />
-      <View style={styles.pagination}>
-        {bannerData.map((_, i) => (
-          <View
-            key={i}
-            style={[styles.dot, i === activeBannerIndex && styles.activeDotBanner]}
-          />
-        ))}
+  const renderBanner = () => {
+    if (loadingBanners) return <View style={[styles.bannerOuterContainer, { height: 180, backgroundColor: '#EEE', borderRadius: 20 }]} />;
+    if (banners.length === 0) return null;
+
+    return (
+      <View style={styles.bannerOuterContainer}>
+        <FlatList
+          data={banners}
+          renderItem={renderBannerItem}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const index = Math.round(e.nativeEvent.contentOffset.x / (width - 30));
+            setActiveBannerIndex(index);
+          }}
+          keyExtractor={(item) => item.id.toString()}
+        />
+        <View style={styles.pagination}>
+          {banners.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.dot, i === activeBannerIndex && styles.activeDotBanner]}
+            />
+          ))}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderFilters = () => (
     <View style={styles.filtersWrapper}>
@@ -127,38 +221,60 @@ const SearchResults = ({ navigation, route }: any) => {
     </View>
   );
 
+  const renderSkeletonItem = () => (
+    <View style={styles.productCard}>
+      <ShimmerPlaceholder height={150} borderRadius={0} />
+      <View style={styles.productInfo}>
+        <ShimmerPlaceholder height={14} width="80%" borderRadius={4} />
+        <ShimmerPlaceholder height={16} width="40%" borderRadius={4} style={{ marginTop: 8 }} />
+        <ShimmerPlaceholder height={25} width="60%" borderRadius={10} style={{ marginTop: 12, alignSelf: 'flex-end' }} />
+      </View>
+    </View>
+  );
+
   const renderProduct = ({ item }: { item: any }) => {
     const isFav = isInWishlist(item.id);
 
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.productCard}
         onPress={() => navigation.navigate('ProductDetail', { product: item })}
       >
         <View style={styles.productImgContainer}>
           <Image source={item.images?.[0]?.src ? { uri: item.images[0].src } : ImageAssets.watch} style={styles.productImg} resizeMode="contain" />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.heartBtn}
             onPress={() => toggleWishlist(item)}
           >
-            <Image 
-              source={ImageAssets.wishlist} 
-              style={[styles.heartIcon, isFav && { tintColor: Colors.primary }]} 
+            <Image
+              source={ImageAssets.wishlist}
+              style={[styles.heartIcon, isFav && { tintColor: Colors.primary }]}
             />
           </TouchableOpacity>
           <View style={styles.ratingBadge}>
             <Image source={ImageAssets.star1} style={styles.starIconSmall} />
-            <AppText font={AppFonts.SemiBold} size={10} color={Colors.black}>{item.average_rating || '4.5'}</AppText>
+            <AppText font={AppFonts.SemiBold} size={10} color={Colors.black}>
+              {parseFloat(item.average_rating) > 0 ? parseFloat(item.average_rating).toFixed(1) : '4.5'}
+            </AppText>
           </View>
-          <TouchableOpacity 
-            style={styles.addBtn}
+          <TouchableOpacity
+            style={[styles.addBtn, isInCart(item.id) && { borderColor: Colors.black30 }]}
             onPress={() => {
-              addItem(item);
-              SimpleToast.show('Added to Cart');
+              if (isInCart(item.id)) {
+                (navigation as any).navigate('MyCart');
+              } else if (item.type === 'variable') {
+                navigation.navigate('ProductDetail', { product: item });
+                Toast.show('Please select options', Toast.SHORT);
+              } else {
+                addItem(item);
+                Toast.show('Added to Cart', Toast.SHORT);
+              }
             }}
           >
-            <Image source={ImageAssets.cart} style={styles.addIcon} />
-            <AppText font={AppFonts.Medium} size={10} color={Colors.black}>Add</AppText>
+            <Image source={ImageAssets.cart} style={[styles.addIcon, isInCart(item.id) && { tintColor: Colors.black30 }]} />
+            <AppText font={AppFonts.Medium} size={10} color={isInCart(item.id) ? Colors.black30 : Colors.primary}>
+              {isInCart(item.id) ? 'Added' : 'Add'}
+            </AppText>
           </TouchableOpacity>
         </View>
 
@@ -179,7 +295,7 @@ const SearchResults = ({ navigation, route }: any) => {
           <View style={styles.sellerRow}>
             <View style={styles.sellerAvatar}>
               {item.store?.vendor_avatar && (
-                 <Image source={{ uri: item.store.vendor_avatar }} style={{ width: 14, height: 14, borderRadius: 7 }} />
+                <Image source={{ uri: item.store.vendor_avatar }} style={{ width: 14, height: 14, borderRadius: 7 }} />
               )}
             </View>
             <AppText font={AppFonts.Regular} size={13} color={Colors.black}>
@@ -196,27 +312,45 @@ const SearchResults = ({ navigation, route }: any) => {
       <AppHeader
         isSearchMode
         placeholder="Watch"
+        searchValue={searchQuery}
+        onChangeText={setSearchQuery}
+        onSubmitEditing={() => handleSearch(searchQuery, initialCategoryId, 1, isFeatured, filters)}
         onBack={() => navigation.goBack()}
-        onFilter={() => navigation.navigate('FilterScreen')}
+        onFilter={() => navigation.navigate('FilterScreen', { 
+          currentFilters: { options: filters },
+          onApply: (newFilters: any[]) => setFilters(newFilters)
+        })}
       />
       <FlatList
-        data={products}
-        renderItem={renderProduct}
-        keyExtractor={(item) => item.id.toString()}
+        data={loading && products.length === 0 ? [1, 2, 3, 4, 5, 6] : products}
+        renderItem={loading && products.length === 0 ? renderSkeletonItem : renderProduct}
+        keyExtractor={(item, index) => `${item.id || item}-${index}`}
         numColumns={2}
+        onRefresh={handleRefresh}
+        refreshing={isRefreshing}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={() => (
+          loadingMore ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <AppText size={14} color={Colors.textGrey}>Loading more...</AppText>
+            </View>
+          ) : null
+        )}
         ListHeaderComponent={() => (
           <>
             {renderBanner()}
             {renderFilters()}
-            {loading && (
-               <View style={{ padding: 20, alignItems: 'center' }}>
-                  <AppText font={AppFonts.Medium} color={Colors.textGrey}>Searching...</AppText>
-               </View>
-            )}
             {!loading && products.length === 0 && (
-               <View style={{ padding: 50, alignItems: 'center' }}>
-                  <AppText font={AppFonts.Medium} color={Colors.textGrey}>No products found for "{searchQuery}"</AppText>
-               </View>
+              <View style={{ padding: 50, alignItems: 'center' }}>
+                <AppText font={AppFonts.Medium} color={Colors.textGrey} textAlign="center">
+                  {categoryName
+                    ? `No products found in "${categoryName}"`
+                    : searchQuery
+                      ? `No products found for "${searchQuery}"`
+                      : "No products available at the moment"}
+                </AppText>
+              </View>
             )}
           </>
         )}

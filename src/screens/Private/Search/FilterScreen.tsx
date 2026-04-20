@@ -13,92 +13,133 @@ import { AppFonts } from '../../../components/Appfonts';
 import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
 import AppHeader from '../../../components/AppHeader';
+import { productService } from '../../../services/productService';
+import ShimmerPlaceholder from '../../../components/ShimmerPlaceholder';
 
 const { width } = Dimensions.get('window');
 
-const FILTER_CATEGORIES = [
+const INITIAL_FILTER_CATEGORIES = [
   'Categories',
   'Price',
-  'Storage Capacity',
-  'Processor Type',
   'Color',
   'Brands',
-  'Customer Rating',
-  'Show Only',
-  'Operating System',
+  'Rating',
 ];
 
-const CATEGORY_OPTIONS: { [key: string]: any[] } = {
-  Categories: [
-    { id: '1', name: 'Top Products (601)' },
-    { id: '2', name: 'Bag & Sports (11)' },
-    { id: '3', name: 'Bag Bazaar (246)' },
-    { id: '4', name: 'Bags (54)' },
-    { id: '5', name: 'Birthday (2)' },
-    { id: '6', name: 'Books (2)' },
-    { id: '7', name: 'Bracelet/Kankanam (261)' },
-    { id: '8', name: 'Cakes (3)' },
-    { id: '9', name: 'Combo Gifts (41)' },
-  ],
-  Price: [
-    { id: 'p1', name: 'Below to Rs. 1000' },
-    { id: 'p2', name: 'Rs. 1000 to Rs. 5000' },
-    { id: 'p3', name: 'Rs. 5000 to Rs. 10000' },
-    { id: 'p4', name: 'Rs. 10000 to Rs. 15000' },
-    { id: 'p5', name: 'Rs. 15000 to Rs. 20000' },
-    { id: 'p6', name: 'Rs. 20000 to Above' },
-  ],
-  'Storage Capacity': [
-    { id: 's1', name: '128 GB' },
-    { id: 's2', name: '256 GB' },
-    { id: 's3', name: '64 GB' },
-  ],
-  Color: [
-    { id: 'c1', name: 'Black', color: '#000000' },
-    { id: 'c2', name: 'Blue', color: '#0000FF' },
-    { id: 'c3', name: 'Red', color: '#FF0000' },
-    { id: 'c4', name: 'Sliver', color: '#A9A9A9' },
-    { id: 'c5', name: 'Yellow', color: '#FFFF00' },
-    { id: 'c6', name: 'White', color: '#F0F0FF' },
-  ],
-  Brands: [
-    { id: 'b1', name: 'Muuto' },
-    { id: 'b2', name: 'Nature' },
-    { id: 'b3', name: 'Smeg' },
-    { id: 'b4', name: 'WestSide' },
-  ],
-};
-
-const FilterScreen = ({ navigation }: any) => {
+const FilterScreen = ({ navigation, route }: any) => {
+  const { onApply, currentFilters } = route.params || {};
+  
   const [activeCategory, setActiveCategory] = useState('Categories');
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [selectedOptions, setSelectedOptions] = useState<any[]>(currentFilters?.options || []);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  const [categories, setCategories] = useState<any[]>([]);
+  const [attributes, setAttributes] = useState<{ [key: string]: any[] }>({});
+  const [loading, setLoading] = useState(true);
+  const [totalProducts, setTotalProducts] = useState(0);
 
-  const toggleOption = (id: string) => {
-    setSelectedOptions((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+  React.useEffect(() => {
+    fetchAllFilterData();
+  }, []);
+
+  const fetchAllFilterData = async () => {
+    try {
+      setLoading(true);
+      const [cats, attrs] = await Promise.all([
+        productService.getCategories({ per_page: 100 }),
+        productService.getAttributes()
+      ]);
+
+      // Filter main categories
+      const mainCats = cats.filter((c: any) => c.parent === 0 && c.name !== 'Uncategorized');
+      setCategories(mainCats);
+
+      // Fetch terms for each attribute
+      const attrData: any = {};
+      if (attrs && attrs.length > 0) {
+        for (const attr of attrs) {
+          const terms = await productService.getAttributeTerms(attr.id);
+          attrData[attr.name] = terms.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            slug: t.slug,
+            taxonomy: t.taxonomy
+          }));
+        }
+      }
+      setAttributes(attrData);
+    } catch (error) {
+      console.log('Filter Data Error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const toggleOption = (opt: any) => {
+    setSelectedOptions((prev) => {
+      const exists = prev.find(p => p.id === opt.id);
+      if (exists) return prev.filter(p => p.id !== opt.id);
+      return [...prev, opt];
+    });
+  };
+
+  const handleApply = () => {
+    if (onApply) {
+      onApply(selectedOptions);
+      navigation.goBack();
+    }
+  };
+
+  const getOptionsForActiveCategory = () => {
+    if (activeCategory === 'Categories') {
+      return categories.map(c => ({ id: c.id, name: c.name, type: 'category' }));
+    }
+    if (activeCategory === 'Price') {
+      return [
+        { id: 'p1', name: 'Below ₹1,000', min: 0, max: 1000, type: 'price' },
+        { id: 'p2', name: '₹1,000 - ₹5,000', min: 1000, max: 5000, type: 'price' },
+        { id: 'p3', name: '₹5,000 - ₹10,000', min: 5000, max: 10000, type: 'price' },
+        { id: 'p4', name: 'Above ₹10,000', min: 10000, max: 999999, type: 'price' },
+      ];
+    }
+    if (activeCategory === 'Rating') {
+       return [
+         { id: 'r4', name: '4 Stars & Above', value: 4, type: 'rating' },
+         { id: 'r3', name: '3 Stars & Above', value: 3, type: 'rating' },
+       ];
+    }
+    return attributes[activeCategory] || [];
+  };
+
+  const filterList = [...INITIAL_FILTER_CATEGORIES, ...Object.keys(attributes).filter(a => !INITIAL_FILTER_CATEGORIES.includes(a))];
 
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {FILTER_CATEGORIES.map((cat) => {
-          const isActive = activeCategory === cat;
-          return (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              key={cat}
-              onPress={() => setActiveCategory(cat)}
-              style={[styles.sidebarItem, isActive && styles.sidebarItemActive]}
-            >
-              <AppText font={isActive ? AppFonts.SemiBold : AppFonts.Regular} size={15} color={isActive ? Colors.primary : '#535353CC'}>
-                {cat}
-              </AppText>
-              {isActive && <View style={styles.activeIndicator} />}
-            </TouchableOpacity>
-          );
-        })}
+        {loading ? (
+          [1, 2, 3, 4, 5, 6].map(i => (
+             <View key={i} style={{ padding: 15 }}>
+               <ShimmerPlaceholder height={15} width="80%" />
+             </View>
+          ))
+        ) : (
+          filterList.map((cat) => {
+            const isActive = activeCategory === cat;
+            return (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                key={cat}
+                onPress={() => setActiveCategory(cat)}
+                style={[styles.sidebarItem, isActive && styles.sidebarItemActive]}
+              >
+                <AppText font={isActive ? AppFonts.SemiBold : AppFonts.Regular} size={15} color={isActive ? Colors.primary : '#535353CC'}>
+                  {cat}
+                </AppText>
+                {isActive && <View style={styles.activeIndicator} />}
+              </TouchableOpacity>
+            );
+          })
+        )}
       </ScrollView>
     </View>
   );
@@ -114,7 +155,7 @@ const FilterScreen = ({ navigation }: any) => {
   };
 
   const renderContent = () => {
-    const options = CATEGORY_OPTIONS[activeCategory] || [];
+    const options = getOptionsForActiveCategory();
     const filteredOptions = options.filter(opt =>
       opt.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -138,29 +179,38 @@ const FilterScreen = ({ navigation }: any) => {
         </AppText>
 
         <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-          {filteredOptions.map((opt) => {
-            const isChecked = selectedOptions.includes(opt.id);
-            return (
-              <TouchableOpacity
-                key={opt.id}
-                onPress={() => toggleOption(opt.id)}
-                style={styles.optionRow}
-              >
-                <View style={[styles.checkbox, {
-                  borderWidth: isChecked ? 0 : 1.5,
-                  borderColor: Colors.primary,
-                }]}>
-                  {isChecked && <Image source={ImageAssets.check} style={styles.checkIcon} />}
-                </View>
-                {opt.color && (
-                  <View style={[styles.colorCircle, { backgroundColor: opt.color }]} />
-                )}
-                <AppText font={AppFonts.Regular} size={15} color={Colors.black}>
-                  {opt.name}
-                </AppText>
-              </TouchableOpacity>
-            );
-          })}
+          {loading ? (
+             [1, 2, 3, 4, 5].map(i => (
+               <View key={i} style={{ padding: 10, flexDirection: 'row', gap: 10 }}>
+                 <ShimmerPlaceholder height={20} width={20} borderRadius={4} />
+                 <ShimmerPlaceholder height={20} width="70%" />
+               </View>
+             ))
+          ) : (
+            filteredOptions.map((opt) => {
+              const isChecked = selectedOptions.some(o => o.id === opt.id);
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  onPress={() => toggleOption(opt)}
+                  style={styles.optionRow}
+                >
+                  <View style={[styles.checkbox, {
+                    borderWidth: isChecked ? 0 : 1.5,
+                    borderColor: Colors.primary,
+                  }]}>
+                    {isChecked && <Image source={ImageAssets.check} style={styles.checkIcon} />}
+                  </View>
+                  {opt.color && (
+                    <View style={[styles.colorCircle, { backgroundColor: opt.color }]} />
+                  )}
+                  <AppText font={AppFonts.Regular} size={15} color={Colors.black}>
+                    {opt.name}
+                  </AppText>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </ScrollView>
       </View>
     );
@@ -175,10 +225,10 @@ const FilterScreen = ({ navigation }: any) => {
       </View>
       <View style={styles.footer}>
         <View>
-          <AppText font={AppFonts.Regular} size={16} color={Colors.black}>5</AppText>
-          <AppText font={AppFonts.Regular} size={15} color={Colors.black30}>Product Found</AppText>
+          <AppText font={AppFonts.Regular} size={16} color={Colors.black}>{selectedOptions.length}</AppText>
+          <AppText font={AppFonts.Regular} size={15} color={Colors.black30}>Filters Selected</AppText>
         </View>
-        <TouchableOpacity style={styles.applyBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.applyBtn} onPress={handleApply}>
           <AppText font={AppFonts.Medium} size={18} color={Colors.white}>Apply Filter</AppText>
         </TouchableOpacity>
       </View>

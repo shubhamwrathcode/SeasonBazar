@@ -17,12 +17,71 @@ import { ImageAssets } from '../../../components/ImageAssets';
 import AppHeader from '../../../components/AppHeader';
 import LinearGradient from 'react-native-linear-gradient';
 import { useCartStore } from '../../../store/useCartStore';
+import { productService } from '../../../services/productService';
+import { customerService } from '../../../services/customerService';
+import { useAuthStore } from '../../../store/useAuthStore';
+import Toast from 'react-native-simple-toast';
 
 const { width } = Dimensions.get('window');
 
 const MyCart = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const { items, removeItem, updateQuantity, totalAmount, clearCart } = useCartStore();
+  const {
+    items,
+    removeItem,
+    updateQuantity,
+    totalAmount,
+    subTotal,
+    discountTotal,
+    couponDiscount,
+    totalSavings,
+    appliedCoupon,
+    applyCoupon,
+    removeCoupon,
+    syncCart,
+    loading: cartLoading
+  } = useCartStore();
+
+  const [couponCode, setCouponCode] = React.useState('');
+  const [loadingCoupon, setLoadingCoupon] = React.useState(false);
+  const { user } = useAuthStore.getState();
+  const [address, setAddress] = React.useState<string>('');
+
+  React.useEffect(() => {
+    syncCart();
+    if (user?.id) fetchAddress();
+  }, [user?.id]);
+
+  const fetchAddress = async () => {
+    try {
+      const data = await customerService.getCustomer(Number(user.id));
+      if (data.shipping?.address_1) {
+        setAddress(`${data.shipping.address_1}, ${data.shipping.city}`);
+      } else if (data.billing?.address_1) {
+        setAddress(`${data.billing.address_1}, ${data.billing.city}`);
+      }
+    } catch (error) {
+      console.log('Error fetching address in cart');
+    }
+  };
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode) return;
+    try {
+      setLoadingCoupon(true);
+      const coupon = await productService.getCouponByCode(couponCode);
+      if (coupon) {
+        applyCoupon(coupon);
+        Toast.show('Coupon applied successfully!', Toast.SHORT);
+      } else {
+        Toast.show('Invalid coupon code', Toast.SHORT);
+      }
+    } catch (error) {
+      Toast.show('Error applying coupon', Toast.SHORT);
+    } finally {
+      setLoadingCoupon(false);
+    }
+  };
 
   const renderCartItem = ({ item }: { item: any }) => (
     <View style={styles.cartCard}>
@@ -33,11 +92,11 @@ const MyCart = ({ navigation }: any) => {
 
         <View style={styles.infoArea}>
           <View style={styles.titleRow}>
-            <AppText font={AppFonts.Medium} size={15} color="#535353CC" style={styles.titleText} numberOfLines={2}>
+            <AppText font={AppFonts.Medium} size={15} color="#535353" style={styles.titleText} numberOfLines={2}>
               {item.name}
             </AppText>
             <TouchableOpacity onPress={() => removeItem(item.id)}>
-              <Image source={ImageAssets.close} style={[styles.heartIcon, { tintColor: 'red' }]} />
+              <Image source={ImageAssets.delete} style={[styles.closeIcon, { tintColor: 'red' }]} />
             </TouchableOpacity>
           </View>
           <AppText font={AppFonts.Regular} size={12} color={Colors.textGrey}>
@@ -47,7 +106,12 @@ const MyCart = ({ navigation }: any) => {
             {item.regular_price && item.regular_price !== item.price && (
               <AppText font={AppFonts.Regular} size={13} color={Colors.black30} style={styles.oldPrice}>₹{item.regular_price}</AppText>
             )}
-            <AppText font={AppFonts.SemiBold} size={20} color={Colors.black}>₹{item.price}</AppText>
+            <AppText font={AppFonts.SemiBold} size={18} color={Colors.black}>₹{item.price}</AppText>
+            {item.regular_price && item.regular_price !== item.price && (
+              <AppText font={AppFonts.SemiBold} size={12} color="green">
+                {Math.round(((parseFloat(item.regular_price) - parseFloat(item.price)) / parseFloat(item.regular_price)) * 100)}% Off
+              </AppText>
+            )}
           </View>
         </View>
       </View>
@@ -55,37 +119,21 @@ const MyCart = ({ navigation }: any) => {
       <View style={styles.controlsRow}>
         <View style={styles.quantityControl}>
           <TouchableOpacity onPress={() => updateQuantity(item.id, item.quantity - 1)} style={styles.qtyActionBtn}>
-            <AppText font={AppFonts.Medium} size={20} color={Colors.black}>-</AppText>
+            <AppText font={AppFonts.Bold} size={20} color={Colors.black}>−</AppText>
           </TouchableOpacity>
-          <AppText font={AppFonts.SemiBold} size={16} color={Colors.black} style={styles.qtyValue}>
+          <AppText font={AppFonts.Bold} size={16} color={Colors.black} style={styles.qtyValue}>
             {item.quantity}
           </AppText>
           <TouchableOpacity onPress={() => updateQuantity(item.id, item.quantity + 1)} style={styles.qtyActionBtn}>
-            <AppText font={AppFonts.Medium} size={20} color={Colors.black}>+</AppText>
+            <AppText font={AppFonts.Bold} size={20} color={Colors.black}>+</AppText>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.couponContainer}>
-          <TextInput
-            placeholder="Coupon"
-            placeholderTextColor={Colors.black30}
-            style={styles.couponInput}
-          />
-          <TouchableOpacity style={styles.applyBtn}>
-            <AppText font={AppFonts.Medium} size={14} color={Colors.white}>Apply</AppText>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.actionsRow}>
         <TouchableOpacity
-          style={styles.removeBtn}
+          style={styles.deleteBtn}
           onPress={() => removeItem(item.id)}
         >
-          <AppText font={AppFonts.Medium} size={16} color={Colors.black}>Delete</AppText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buyBtn}>
-          <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Proceed</AppText>
+          <AppText font={AppFonts.SemiBold} size={14} color={Colors.black}>Remove</AppText>
         </TouchableOpacity>
       </View>
     </View>
@@ -98,7 +146,7 @@ const MyCart = ({ navigation }: any) => {
       <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey} style={{ marginTop: 10 }}>Add some products to your bazaar!</AppText>
       <TouchableOpacity
         style={styles.shopNowBtn}
-        onPress={() => navigation.navigate('Main')}
+        onPress={() => navigation.navigate('Home')}
       >
         <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Shop Now</AppText>
       </TouchableOpacity>
@@ -115,28 +163,106 @@ const MyCart = ({ navigation }: any) => {
         renderItem={renderCartItem}
         ListEmptyComponent={renderEmptyCart}
         contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={() => (
+           <View style={styles.addressBar}>
+              <View style={{ flex: 1 }}>
+                <AppText font={AppFonts.Regular} size={13} color={Colors.textGrey}>Deliver to:</AppText>
+                <AppText font={AppFonts.Medium} size={15} color={Colors.black} numberOfLines={1}>
+                   {address || (user ? 'Hi, ' + (user.first_name || 'User') : 'Add Address')}
+                </AppText>
+              </View>
+              <TouchableOpacity activeOpacity={0.7} style={styles.changeAddressBtn} onPress={() => navigation.navigate('ManageAddresses')}>
+                 <AppText font={AppFonts.SemiBold} size={14} color={Colors.primary}>Change</AppText>
+              </TouchableOpacity>
+           </View>
+        )}
         ListFooterComponent={items.length > 0 ? (
-          <View style={styles.summaryContainer}>
-            <View style={styles.summaryRow}>
-              <AppText font={AppFonts.Regular} size={16} color={Colors.textGrey}>Subtotal</AppText>
-              <AppText font={AppFonts.SemiBold} size={18} color={Colors.black}>₹{totalAmount().toFixed(2)}</AppText>
+          <View style={{ marginBottom: 40 }}>
+            {/* Coupon Section */}
+            <View style={styles.couponSection}>
+              <AppText font={AppFonts.SemiBold} size={16} color={Colors.black} style={{ marginBottom: 12 }}>Coupons</AppText>
+              <View style={styles.couponInputWrapper}>
+                <Image source={ImageAssets.discount} style={styles.couponIcon} />
+                <TextInput
+                  placeholder="Enter Coupon Code"
+                  placeholderTextColor={Colors.black30}
+                  style={styles.couponTextInput}
+                  value={couponCode}
+                  onChangeText={setCouponCode}
+                  autoCapitalize="characters"
+                />
+                <TouchableOpacity
+                  onPress={handleApplyCoupon}
+                  disabled={loadingCoupon}
+                  style={styles.applyTextBtn}
+                >
+                  <AppText font={AppFonts.Bold} size={15} color={Colors.primary}>
+                    {loadingCoupon ? '...' : 'APPLY'}
+                  </AppText>
+                </TouchableOpacity>
+              </View>
+              {appliedCoupon && (
+                <View style={styles.appliedBadge}>
+                  <AppText font={AppFonts.SemiBold} size={13} color="green">
+                    "{appliedCoupon.code}" applied! You saved ₹{couponDiscount().toFixed(2)}
+                  </AppText>
+                  <TouchableOpacity onPress={removeCoupon}>
+                    <AppText font={AppFonts.Bold} size={13} color="red">REMOVE</AppText>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-            <View style={[styles.summaryRow, { marginTop: 10 }]}>
-              <AppText font={AppFonts.Regular} size={16} color={Colors.textGrey}>Shipping</AppText>
-              <AppText font={AppFonts.Medium} size={16} color={Colors.primary}>Calculated at checkout</AppText>
+
+            {/* Price Details */}
+            <View style={styles.summaryContainer}>
+              <AppText font={AppFonts.SemiBold} size={18} color={Colors.black} style={{ marginBottom: 20 }}>Price Details</AppText>
+
+              <View style={styles.summaryRow}>
+                <AppText font={AppFonts.Regular} size={16} color={Colors.black}>Price ({items.length} items)</AppText>
+                <AppText font={AppFonts.Regular} size={16} color={Colors.black}>₹{subTotal().toFixed(2)}</AppText>
+              </View>
+
+              <View style={[styles.summaryRow, { marginTop: 15 }]}>
+                <AppText font={AppFonts.Regular} size={16} color={Colors.black}>Discount</AppText>
+                <AppText font={AppFonts.Regular} size={16} color="green">− ₹{discountTotal().toFixed(2)}</AppText>
+              </View>
+
+              {appliedCoupon && (
+                <View style={[styles.summaryRow, { marginTop: 15 }]}>
+                  <AppText font={AppFonts.Regular} size={16} color={Colors.black}>Coupon Discount</AppText>
+                  <AppText font={AppFonts.Regular} size={16} color="green">− ₹{couponDiscount().toFixed(2)}</AppText>
+                </View>
+              )}
+
+              <View style={[styles.summaryRow, { marginTop: 15 }]}>
+                <AppText font={AppFonts.Regular} size={16} color={Colors.black}>Delivery Charges</AppText>
+                <AppText font={AppFonts.Regular} size={16} color="green">
+                  {totalAmount() > 500 ? 'FREE' : '₹40'}
+                </AppText>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.summaryRow}>
+                <AppText font={AppFonts.Bold} size={18} color={Colors.black}>Total Amount</AppText>
+                <AppText font={AppFonts.Bold} size={20} color={Colors.black}>
+                  ₹{(totalAmount() + (totalAmount() > 500 ? 0 : 40)).toFixed(2)}
+                </AppText>
+              </View>
+
+              <View style={styles.divider} />
+
+              <AppText font={AppFonts.SemiBold} size={15} color="green">
+                You will save ₹{totalSavings().toFixed(2)} on this order
+              </AppText>
+
+              <TouchableOpacity
+                style={styles.checkoutBtn}
+                onPress={() => navigation.navigate('Checkout')}
+              >
+                <AppText font={AppFonts.Bold} size={18} color={Colors.white}>PLACE ORDER</AppText>
+              </TouchableOpacity>
             </View>
-            <View style={styles.divider} />
-            <View style={styles.summaryRow}>
-              <AppText font={AppFonts.SemiBold} size={18} color={Colors.black}>Total</AppText>
-              <AppText font={AppFonts.SemiBold} size={22} color={Colors.primary}>₹{totalAmount().toFixed(2)}</AppText>
-            </View>
-            <TouchableOpacity
-              style={styles.checkoutBtn}
-              onPress={() => navigation.navigate('Checkout')}
-            >
-              <AppText font={AppFonts.SemiBold} size={18} color={Colors.white}>Check Out</AppText>
-            </TouchableOpacity>
           </View>
         ) : null}
       />
@@ -154,6 +280,24 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 20,
     paddingBottom: 40,
+  },
+  addressBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    padding: 15,
+    borderRadius: 15,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#EEE',
+    gap: 15,
+  },
+  changeAddressBtn: {
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   cartCard: {
     backgroundColor: Colors.white,
@@ -191,23 +335,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginBottom: 4,
   },
-  heartIcon: {
-    width: 22,
-    height: 22,
-    marginLeft: 10,
-    resizeMode: "contain"
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    gap: 4,
-    marginVertical: 4,
-  },
-  starIcon: {
-    width: 14,
-    height: 14,
-    tintColor: '#FFC529',
-    resizeMode: "contain"
-  },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -216,55 +343,69 @@ const styles = StyleSheet.create({
   },
   oldPrice: {
     textDecorationLine: 'line-through',
+    fontSize: 13,
+    color: Colors.black30,
   },
   controlsRow: {
     flexDirection: 'row',
     gap: 12,
     marginBottom: 15,
   },
-  qtyBtn: {
+  deleteBtn: {
     flex: 1,
     height: 48,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#EFEFEF',
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    backgroundColor: '#FAFAFA',
-  },
-  dropdownIcon: {
-    width: 12,
-    height: 12,
-    tintColor: Colors.black,
-    transform: [{ rotate: '90deg' }],
-  },
-  couponContainer: {
-    flex: 2,
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FAFAFA',
-    overflow: 'hidden',
-  },
-  couponInput: {
-    flex: 1,
-    height: '100%',
-    paddingHorizontal: 15,
-    fontFamily: AppFonts.Regular,
-    fontSize: 14,
-    color: Colors.black,
-  },
-  applyBtn: {
-    backgroundColor: Colors.primary,
-    height: '100%',
-    paddingHorizontal: 20,
+    borderColor: '#DDD',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  couponSection: {
+    backgroundColor: Colors.white,
+    padding: 20,
+    borderRadius: 20,
+    marginBottom: 20,
+    borderWidth: 0.5,
+    borderColor: '#DDD',
+  },
+  couponInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#EEE',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    height: 55,
+  },
+  couponIcon: {
+    width: 20,
+    height: 20,
+    tintColor: Colors.primary,
+    marginRight: 10,
+  },
+  couponTextInput: {
+    flex: 1,
+    fontFamily: AppFonts.Regular,
+    fontSize: 15,
+    color: Colors.black,
+  },
+  applyTextBtn: {
+    paddingHorizontal: 10,
+  },
+  appliedBadge: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 15,
+    backgroundColor: '#EFFFFA',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#B0FFE0',
+  },
+  closeIcon: {
+    width: 20,
+    height: 20,
   },
   hintRow: {
     flexDirection: 'row',

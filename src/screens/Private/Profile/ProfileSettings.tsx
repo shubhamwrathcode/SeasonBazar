@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -6,7 +6,9 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
-  StatusBar,
+  ActivityIndicator,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../../components/colors';
@@ -14,63 +16,92 @@ import { AppFonts } from '../../../components/Appfonts';
 import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
 import LinearGradient from 'react-native-linear-gradient';
+import { useAuthStore } from '../../../store/useAuthStore';
+import { customerService } from '../../../services/customerService';
+import AppHeader from '../../../components/AppHeader';
+import Toast from 'react-native-simple-toast';
 
 const { width } = Dimensions.get('window');
 
-const SETTINGS_LIST = [
-  { id: '1', title: 'Recent orders', icon: ImageAssets.recentOrder },
-  { id: '2', title: 'Shipping and Billing addresses', icon: ImageAssets.location },
-  { id: '3', title: 'Password and Security', icon: ImageAssets.security },
-];
-
-const DASHBOARD_GRID = [
-  { id: '1', title: 'Dashboard', icon: ImageAssets.dashboard, bgColor: '#F2F1FF' },
-  { id: '2', title: 'Orders', icon: ImageAssets.orders, bgColor: '#FFF1F1' },
-  { id: '3', title: 'Downloads', icon: ImageAssets.downloads, bgColor: '#FFF9ED' },
-  { id: '4', title: 'Addresses', icon: ImageAssets.address, bgColor: '#F1FFF1' },
-  { id: '5', title: 'Account Details', icon: ImageAssets.accountdetail, bgColor: '#F1FFFF' },
-  { id: '6', title: 'Return & Refunds', icon: ImageAssets.return, bgColor: '#FFF1F1' },
-  { id: '7', title: 'Seller Support Tickets', icon: ImageAssets.seller, bgColor: '#F2F1FF' },
-  { id: '8', title: 'Vendors', icon: ImageAssets.vendors, bgColor: '#FFF1F1' },
-];
-
 const ProfileSettings = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
+  const { user, logout } = useAuthStore();
+  const [customer, setCustomer] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [editModal, setEditModal] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
-  const renderSettingItem = (item: any) => (
-    <TouchableOpacity key={item.id} style={styles.settingCard}>
+  // Edit Form State
+  const [editForm, setEditForm] = useState({
+    first_name: '',
+    last_name: '',
+  });
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    if (!user?.id) return;
+    try {
+      setLoading(true);
+      const data = await customerService.getCustomer(Number(user.id));
+      setCustomer(data);
+      setEditForm({
+        first_name: data.first_name || '',
+        last_name: data.last_name || '',
+      });
+    } catch (error) {
+      console.log('Error fetching profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    console.log('--- Handle Update Profile Started ---');
+    console.log('User Object from Store:', JSON.stringify(user, null, 2));
+    
+    if (user?.id === undefined || user?.id === null) {
+       console.log('Error: User ID is null or undefined');
+       return;
+    }
+    try {
+      setUpdating(true);
+      console.log('Updating customer:', user.id, 'with data:', editForm);
+      const res = await customerService.updateCustomer(Number(user.id), editForm);
+      console.log(res, '==res')
+      setCustomer(res);
+      setEditModal(false);
+      Toast.show('Profile updated!', Toast.SHORT);
+    } catch (error: any) {
+      console.log('Update Profile Error:', error?.response?.data || error);
+      Toast.show('Update failed', Toast.SHORT);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    Toast.show('Logged out successfully', Toast.SHORT);
+  };
+
+  const renderSettingItem = (title: string, icon: any, onPress: () => void) => (
+    <TouchableOpacity style={styles.settingCard} onPress={onPress}>
       <View style={styles.settingLeft}>
         <View style={styles.settingIconBg}>
-          <Image source={item.icon} style={[styles.settingIcon, { tintColor: item?.id === '2' ? Colors.primary : null }]} resizeMode="contain" />
+          <Image source={icon} style={styles.settingIcon} resizeMode="contain" />
         </View>
-        <AppText font={AppFonts.Regular} size={16} color={Colors.black}>{item.title}</AppText>
+        <AppText font={AppFonts.Regular} size={16} color={Colors.black}>{title}</AppText>
       </View>
       <Image source={ImageAssets.arrowright} style={styles.chevron} />
     </TouchableOpacity>
   );
 
-  const renderGridItem = (item: any) => (
-    <TouchableOpacity key={item.id} style={[styles.gridCard, { backgroundColor: item.bgColor }]}>
-      <Image source={item.icon} style={styles.gridIcon} resizeMode="contain" />
-      <AppText font={AppFonts.Regular} size={13} color={Colors.black} textAlign="center" style={styles.gridLabel}>
-        {item.title}
-      </AppText>
-    </TouchableOpacity>
-  );
-
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
-
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Image source={ImageAssets.backIcon} style={styles.backIcon} />
-        </TouchableOpacity>
-        <AppText font={AppFonts.Medium} size={22} color={Colors.black} style={styles.headerTitle}>
-          Profile Settings
-        </AppText>
-      </View>
+      <AppHeader title="Profile Settings" onBack={() => navigation.goBack()} />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Profile Card */}
@@ -80,52 +111,107 @@ const ProfileSettings = ({ navigation }: any) => {
               source={{ uri: 'https://i.pravatar.cc/300' }}
               style={styles.avatar}
             />
-            <View style={styles.cameraBadge}>
+            <TouchableOpacity style={styles.cameraBadge}>
               <Image source={ImageAssets.camera} style={styles.cameraIcon} />
-            </View>
+            </TouchableOpacity>
           </View>
           <View style={styles.profileMeta}>
-            <AppText font={AppFonts.SemiBold} size={18} color={Colors.black}>Vinayak sharma</AppText>
-            <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>Vinusharma@Gmail.Com</AppText>
+            {loading ? (
+              <ActivityIndicator color={Colors.primary} size="small" />
+            ) : (
+              <>
+                <AppText font={AppFonts.SemiBold} size={18} color={Colors.black}>
+                  {customer ? `${customer.first_name} ${customer.last_name}` : user?.first_name ? `${user.first_name} ${user.last_name}` : 'Season Bazar User'}
+                </AppText>
+                <AppText font={AppFonts.Regular} size={14} color={Colors.textGrey}>
+                  {customer?.email || user?.email}
+                </AppText>
+              </>
+            )}
           </View>
         </View>
 
-        {/* Section 1 */}
+        {/* Section 1: Account Management */}
         <AppText font={AppFonts.Medium} size={18} color={Colors.black} style={styles.sectionTitle}>
-          Product highlights
+          Account Management
         </AppText>
         <View style={styles.settingsWrapper}>
-          {SETTINGS_LIST.map(renderSettingItem)}
+          {renderSettingItem('Edit Name', ImageAssets.accountdetail, () => setEditModal(true))}
+          {renderSettingItem('Shipping & Billing Addresses', ImageAssets.address, () => navigation.navigate('ManageAddresses'))}
+          {renderSettingItem('Order History', ImageAssets.orders, () => navigation.navigate('MyOrders'))}
+          {renderSettingItem('Password & Security', ImageAssets.security, () => { })}
         </View>
 
-        {/* Vendor Button */}
-        <TouchableOpacity style={styles.vendorBtnWrapper}>
-          <LinearGradient
-            colors={['#7E57FF', '#522ED1']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.vendorBtn}
-          >
-            <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Open Vendor Dashboard</AppText>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Section 2 */}
-        <AppText font={AppFonts.Medium} size={18} color={Colors.black} style={styles.sectionTitle}>
-          Product highlights
-        </AppText>
-        <View style={styles.gridWrapper}>
-          {DASHBOARD_GRID.map(renderGridItem)}
-        </View>
+        {/* Vendor Button (Conditional) */}
+        {user?.role === 'vendor' && (
+          <TouchableOpacity style={styles.vendorBtnWrapper}>
+            <LinearGradient
+              colors={['#7E57FF', '#522ED1']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.vendorBtn}
+            >
+              <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Open Vendor Dashboard</AppText>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
 
         {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutBtn}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <View style={styles.logoutIconBg}>
             <Image source={ImageAssets.logout} style={styles.logoutIcon} />
           </View>
           <AppText font={AppFonts.Medium} size={18} color={Colors.white}>LOG OUT</AppText>
         </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Edit Profile Modal */}
+      <Modal visible={editModal} transparent animationType="fade" onRequestClose={() => setEditModal(false)}>
+        <View style={styles.modalBg}>
+          <View style={styles.modalContent}>
+            <AppText font={AppFonts.Bold} size={20} color={Colors.black} style={{ marginBottom: 20 }}>Edit Profile</AppText>
+
+            <View style={styles.inputGroup}>
+              <AppText font={AppFonts.Medium} size={14} color={Colors.black}>First Name</AppText>
+              <TextInput
+                style={styles.modalInput}
+                value={editForm.first_name}
+                onChangeText={(t) => setEditForm({ ...editForm, first_name: t })}
+                placeholder="First Name"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <AppText font={AppFonts.Medium} size={14} color={Colors.black}>Last Name</AppText>
+              <TextInput
+                style={styles.modalInput}
+                value={editForm.last_name}
+                onChangeText={(t) => setEditForm({ ...editForm, last_name: t })}
+                placeholder="Last Name"
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditModal(false)}>
+                <AppText font={AppFonts.Medium} color={Colors.textGrey}>Cancel</AppText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                 style={styles.saveBtn} 
+                 onPress={() => {
+                   console.log('Save button pressed!');
+                   handleUpdateProfile();
+                 }} 
+                 disabled={updating}
+                 activeOpacity={0.7}
+              >
+                {updating ? <ActivityIndicator color="#FFF" /> : <AppText font={AppFonts.Bold} color="#FFF">Save</AppText>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -136,30 +222,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    backgroundColor: Colors.white,
-    paddingBottom: 15,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backIcon: {
-    width: 35,
-    height: 35,
-    tintColor: Colors.primary,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    marginRight: 40, // Balance backBtn
   },
   scrollContent: {
     padding: 20,
@@ -252,29 +314,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  gridWrapper: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 15,
-    marginBottom: 30,
-  },
-  gridCard: {
-    width: (width - 55) / 2,
-    height: 100,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 10,
-  },
-  gridIcon: {
-    width: 40,
-    height: 40,
-    marginBottom: 8,
-  },
-  gridLabel: {
-    lineHeight: 18,
-  },
   logoutBtn: {
     backgroundColor: Colors.primary,
     flexDirection: 'row',
@@ -304,4 +343,11 @@ const styles = StyleSheet.create({
     height: 18,
     tintColor: Colors.primary,
   },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#FFF', borderRadius: 20, padding: 25 },
+  modalInput: { height: 50, borderBottomWidth: 1, borderBottomColor: '#EEE', fontFamily: AppFonts.Regular, color: '#000' },
+  inputGroup: { marginBottom: 15 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 },
+  cancelBtn: { padding: 10 },
+  saveBtn: { backgroundColor: Colors.primary, paddingHorizontal: 25, paddingVertical: 10, borderRadius: 10, minWidth: 80, alignItems: 'center' },
 });

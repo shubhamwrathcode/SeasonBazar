@@ -34,6 +34,19 @@ export const productService = {
   },
 
   /**
+   * Get variations for a product
+   */
+  getProductVariations: async (productId: number) => {
+    try {
+      const response = await wcApiClient.get(`/products/${productId}/variations`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Get Variations Error:', error.response?.data || error.message);
+      throw error.response?.data || error;
+    }
+  },
+
+  /**
    * List all categories
    */
   getCategories: async (params = {}) => {
@@ -77,7 +90,12 @@ export const productService = {
    */
   getOrders: async (customerId: number) => {
     try {
-      const response = await wcApiClient.get('/orders', { params: { customer: customerId } });
+      const response = await wcApiClient.get('/orders', { 
+        params: { 
+          customer: customerId,
+          status: 'any' // Ensures we get Pending, Processing, etc.
+        } 
+      });
       return response.data;
     } catch (error: any) {
       console.error('Get Orders Error:', error.response?.data || error.message);
@@ -97,6 +115,47 @@ export const productService = {
     } catch (error: any) {
        console.error('Search Products Error:', error.response?.data || error.message);
        throw error.response?.data || error;
+    }
+  },
+
+  /**
+   * Validate a coupon code
+   */
+  getCouponByCode: async (code: string) => {
+    try {
+      const response = await wcApiClient.get('/coupons', {
+        params: { code: code }
+      });
+      return response.data?.[0]; // WooCommerce returns an array for the code search
+    } catch (error: any) {
+      console.error('Validate Coupon Error:', error.response?.data || error.message);
+      throw error.response?.data || error;
+    }
+  },
+
+  /**
+   * Get detailed customer profile
+   */
+  getCustomer: async (customerId: number) => {
+    try {
+      const response = await wcApiClient.get(`/customers/${customerId}`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Get Customer Error:', error.response?.data || error.message);
+      throw error.response?.data || error;
+    }
+  },
+
+  /**
+   * Update customer profile or address
+   */
+  updateCustomer: async (customerId: number, data: any) => {
+    try {
+      const response = await wcApiClient.put(`/customers/${customerId}`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Update Customer Error:', error.response?.data || error.message);
+      throw error.response?.data || error;
     }
   }
 };

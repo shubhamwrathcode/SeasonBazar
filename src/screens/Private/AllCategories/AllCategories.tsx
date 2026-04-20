@@ -12,6 +12,7 @@ import { Colors } from '../../../components/colors';
 import { AppFonts } from '../../../components/Appfonts';
 import AppText from '../../../components/AppText';
 import { ImageAssets } from '../../../components/ImageAssets';
+import ShimmerPlaceholder from '../../../components/ShimmerPlaceholder';
 import LinearGradient from 'react-native-linear-gradient';
 
 import { productService } from '../../../services/productService';
@@ -73,13 +74,13 @@ const AllCategories = ({ navigation }: any) => {
               activeOpacity={0.9}
               key={item.id}
               onPress={() => setSelectedCategoryId(item.id)}
-              style={[styles.sidebarItem]}
+              style={[styles.sidebarItem, isSelected && styles.sidebarItemSelected]}
             >
-              <View style={[styles.sidebarIconBg, isSelected && { backgroundColor: Colors.primary }]}>
+              <View style={[styles.sidebarIconBg, isSelected && { backgroundColor: '#F0F1FF' }]}>
                 {item.image?.src ? (
                   <Image source={{ uri: item.image.src }} style={styles.sidebarIcon} resizeMode="contain" />
                 ) : (
-                  <Image source={ImageAssets.doll} style={[styles.sidebarIcon, isSelected && { tintColor: Colors.white }]} resizeMode="contain" />
+                  <Image source={ImageAssets.doll} style={styles.sidebarIcon} resizeMode="contain" />
                 )}
               </View>
               <AppText
@@ -101,11 +102,24 @@ const AllCategories = ({ navigation }: any) => {
   const renderMainContent = () => {
     const selectedCatName = categories.find(c => c.id === selectedCategoryId)?.name || 'Products';
 
-    if (loadingProducts) {
+    if (loadingCats || loadingProducts) {
       return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <AppText font={AppFonts.Medium} color={Colors.textGrey}>Loading products...</AppText>
-        </View>
+        <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.gridSection}>
+            <View style={styles.gridHeader}>
+              <ShimmerPlaceholder height={20} width="40%" borderRadius={4} />
+            </View>
+            <View style={styles.grid}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+                <View key={i} style={styles.gridItem}>
+                  <ShimmerPlaceholder height={80} width="100%" borderRadius={15} />
+                  <ShimmerPlaceholder height={12} width="80%" style={{ marginTop: 8 }} />
+                  <ShimmerPlaceholder height={12} width="50%" style={{ marginTop: 5 }} />
+                </View>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
       );
     }
 
@@ -164,8 +178,13 @@ const AllCategories = ({ navigation }: any) => {
       />
       <View style={styles.content}>
         {loadingCats ? (
-          <View style={{ width: 90, backgroundColor: '#F1F4FF', justifyContent: 'center' }}>
-            <AppText textAlign='center' size={10}>Loading...</AppText>
+          <View style={[styles.sidebar, { paddingVertical: 20 }]}>
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <View key={i} style={{ alignItems: 'center', marginBottom: 20 }}>
+                <ShimmerPlaceholder height={50} width={50} borderRadius={25} />
+                <ShimmerPlaceholder height={10} width="60%" style={{ marginTop: 8 }} />
+              </View>
+            ))}
           </View>
         ) : renderSidebar()}
         <View style={styles.mainContentWrapper}>
@@ -193,23 +212,24 @@ const styles = StyleSheet.create({
   },
   sidebarItem: {
     width: '100%',
-    paddingVertical: 15,
+    paddingVertical: 18,
     alignItems: 'center',
     position: 'relative',
-    backgroundColor: '#562CDA1A',
+    backgroundColor: 'transparent',
   },
   sidebarItemSelected: {
-    // backgroundColor: Colors.white,
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
   },
   activeIndicator: {
     position: 'absolute',
     left: 0,
-    top: 5,
-    bottom: 5,
-    width: 5,
+    top: '25%',
+    bottom: '25%',
+    width: 3.5,
     backgroundColor: Colors.primary,
-    borderTopRightRadius: 5,
-    borderBottomRightRadius: 5,
+    borderRadius: 10,
   },
   sidebarIconBg: {
     width: 60,

@@ -66,8 +66,15 @@ const Wishlist = ({ navigation }: any) => {
         <TouchableOpacity 
           style={styles.addBtn}
           onPress={() => {
-             addItem(item);
-             SimpleToast.show('Added to Cart');
+             if (item.type === 'variable') {
+               // Wishlist items might not have full product data in some states, 
+               // so we pass 'product' key which is compatible with ProductDetail
+               navigation.navigate('ProductDetail', { product: item });
+               SimpleToast.show('Please select options');
+             } else {
+               addItem(item);
+               SimpleToast.show('Added to Cart');
+             }
           }}
         >
           <AppText font={AppFonts.Medium} size={16} color={Colors.white}>Add to Cart</AppText>
